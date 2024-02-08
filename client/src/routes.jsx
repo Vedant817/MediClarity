@@ -1,17 +1,17 @@
 import React from 'react';
-import {BrowserRouter as Router,Route,Routes} from 'react';
+import {BrowserRouter,Route,Routes} from 'react-router-dom';
 import Contact from './Pages/Contact.jsx';
 import About from './Pages/About.jsx';
 import Landing from './Pages/Landing.jsx';
 import Login from './Pages/Login.jsx';
-import Register from './Pages/Register.jsx'
-import Main from './Pages/Main.jsx'
+import Register from './Pages/Register.jsx';
+import Main from './Pages/Main.jsx';
 
 
 
 const AppRoute = () => {
     return(
-        <Router>
+        <BrowserRouter>
             <Routes>
                 <Route path = '/' element = {<Main/>}/>
                 <Route path = '/landing' element = {<Landing/>}/>
@@ -20,7 +20,7 @@ const AppRoute = () => {
                 <Route path = '/login' element={<Login/>}/>
                 <Route path = '/register' element={<Register/>}/>
             </Routes>
-        </Router>
+        </BrowserRouter>
     )
 }
 
