@@ -8,6 +8,7 @@ import Register from './Pages/Register.jsx'
 import Main from './Pages/Main.jsx'
 
 
+
 const AppRoute = () => {
     return(
         <Router>
