@@ -30,9 +30,11 @@ function drop() {
       <strong>OR</strong>
       <span class="dragBox" >
       Drag and Drop image here
-      <input type="file" onChange={dragNdrop}  ondragover={drag} ondrop={drop} id="uploadFile"  />
+      <input type="file" onChange={dragNdrop}  ondragover={drag} ondrop={drop} id="uploadFile" accept='application/jpeg'/>
       </span>
       </div>
+
+      <div id="preview"></div>
 
       <div class="category-name"></div> <br/>
             
@@ -51,7 +53,7 @@ function drop() {
                 </div>
             </div>
             </div>
-     <div id="preview"></div>
+     
     </div>
 
     
