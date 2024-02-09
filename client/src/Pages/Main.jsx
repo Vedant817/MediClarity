@@ -65,16 +65,30 @@ const Main = () => {
                         
                 <div className="basic-card basic-card-aqua">
                     <div className="card-content">
-                        <span className="card-title">Card Title</span>
+                        <span className="card-title"></span>
+                        <p className="card-text"><div id="preview"></div></p> {/* Render extracted text here */}
+                    </div>
+
+                        <div className="card-link">
+                            <a href="#" title="Read Full"><span></span></a>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="card-category-1">
+                        
+                <div className="basic-card basic-card-aqua">
+                    <div className="card-content">
+                        <span className="card-title"></span>
                         <p className="card-text">{extractedText}</p> {/* Render extracted text here */}
                     </div>
 
                         <div className="card-link">
-                            <a href="#" title="Read Full"><span>Read Full</span></a>
+                            <a href="#" title="Read Full"><span></span></a>
                         </div>
                     </div>
                 </div>
-            <div id="preview"></div>
+            
         </div>
     );
 }
