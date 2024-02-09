@@ -30,7 +30,7 @@ const Landing = () => {
         </div>
         <div className="image">
           <span className="image__bg"></span>
-          <img src="../Assets/header-bg.png" alt="header image" />
+          <img src="https://th.bing.com/th/id/OIP.PmMRdAQpxVPZ_h0seYzhlgHaKE?w=202&h=275&c=7&r=0&o=5&dpr=1.3&pid=1.7" alt="header image" />
           <div className="image__content image__content__1">
             <span><i className="ri-user-3-line"></i></span>
             <div className="details">
