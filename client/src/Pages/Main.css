@@ -71,7 +71,7 @@
 }
 
 body {
-    margin:0;
+    margin: 10px;;
 }
 
 .category-name {
@@ -1362,5 +1362,10 @@ body {
         height: 254px;
     }
 }
+.card-container {
+    display: flex;
+    justify-content: space-between; /* Adjust as needed */
+  }
+  
 
   

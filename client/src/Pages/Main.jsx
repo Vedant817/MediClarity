@@ -45,14 +45,13 @@ const Main = () => {
 
             <div className="category-name"></div> <br/>
                     
-            <div className="card-category-1">
-                        
-                <div className="basic-card basic-card-aqua">
-                    <div className="card-content">
-                        <span className="card-title"></span>
-                        <p className="card-text"><div id="preview"></div></p> {/* Render extracted text here */}
-                    </div>
-
+            <div className="card-container">
+                <div className="card-category-1">
+                    <div className="basic-card basic-card-aqua">
+                        <div className="card-content">
+                            <span className="card-title"></span>
+                            <p className="card-text"><div id="preview"></div></p> {/* Render extracted text here */}
+                        </div>
                         <div className="card-link">
                             <a href="#" title="Read Full"><span></span></a>
                         </div>
@@ -60,19 +59,17 @@ const Main = () => {
                 </div>
 
                 <div className="card-category-1">
-                        
-                <div className="basic-card basic-card-aqua">
-                    <div className="card-content">
-                        <span className="card-title"></span>
-                        <p className="card-text">{extractedText}</p> {/* Render extracted text here */}
-                    </div>
-
+                    <div className="basic-card basic-card-aqua">
+                        <div className="card-content">
+                            <span className="card-title"></span>
+                            <p className="card-text">{extractedText}</p> {/* Render extracted text here */}
+                        </div>
                         <div className="card-link">
                             <a href="#" title="Read Full"><span></span></a>
                         </div>
                     </div>
                 </div>
-            
+            </div>
         </div>
     );
 }
