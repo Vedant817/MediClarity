@@ -71,7 +71,7 @@
 }
 
 body {
-    margin:0;
+    margin: 10px;;
 }
 
 .category-name {
@@ -172,7 +172,7 @@ body {
 
         .basic-card-aqua .card-content, .basic-card .card-link a {
             color: #fff;
-            height: 30em;
+            height: 50em;
         }
         
         .basic-card-aqua .card-link {
@@ -1362,5 +1362,10 @@ body {
         height: 254px;
     }
 }
+.card-container {
+    display: flex;
+    justify-content: space-between; /* Adjust as needed */
+  }
+  
 
   
