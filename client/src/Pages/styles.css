@@ -1,0 +1,126 @@
+.arch_contact_us_duplicate {
+  font-family: Nunito, sans-serif;
+}
+
+.arch_contact_us_duplicate .icon-block {
+  width: 30px;
+  height: 30px;
+  fill: #b0ab4d; /* Apply fill color to social icons */
+}
+.arch_contact_us_duplicate .contact-header {
+  font-weight: bold;
+  font-family: 'Your Unique Font', sans-serif; /* Replace 'Your Unique Font' with the name of your desired font */
+  text-align: center;
+}
+
+
+.arch_contact_us_duplicate .text-blk {
+  margin: 0;
+  padding: 0;
+  line-height: 1.6;
+}
+
+.arch_contact_us_duplicate .responsive-container-block {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+}
+
+.arch_contact_us_duplicate .responsive-container-block.big-container {
+  min-height: 100vh;
+  padding: 0 50px;
+  background-color: #fdfcea;
+}
+
+.arch_contact_us_duplicate .responsive-container-block.container {
+  max-width: 1100px;
+  justify-content: space-evenly;
+}
+
+.arch_contact_us_duplicate .text-blk.section-head {
+  font-size: 60px;
+  line-height: 1.08;
+  margin-bottom: 24px;
+}
+
+.arch_contact_us_duplicate .text-blk.section-subhead {
+  font-size: 14px;
+  color: #7e7e7e;
+}
+
+.arch_contact_us_duplicate .input,
+.arch_contact_us_duplicate .textinput {
+  width: 100%;
+  margin-bottom: 15px;
+  height: 54px;
+  border-radius: 5px;
+  border: 2px solid #767676;
+  background-color: #f3f2cf;
+  font-size: 16px;
+  padding: 1px 16px;
+}
+
+.arch_contact_us_duplicate .textinput {
+  height: 125px;
+}
+
+.arch_contact_us_duplicate .button {
+  width: 100%;
+  height: 50px;
+  min-width: 240px;
+  margin-bottom: 60px;
+  font-size: 16px;
+  color: white;
+  background-color: #b0ab4d;
+  border: 2px solid #767676;
+  border-radius: 5px;
+}
+
+.arch_contact_us_duplicate .form-wrapper {
+  border-bottom: 4px solid #f3f2cf;
+  margin-bottom: 60px;
+}
+
+.arch_contact_us_duplicate .social-media-icon-container {
+  display: flex;
+  max-width: 400px;
+  justify-content: space-evenly;
+}
+
+/* Media Queries */
+@media (max-width: 1024px) {
+  .arch_contact_us_duplicate .text-blk.section-head {
+    font-size: 55px;
+  }
+  .arch_contact_us_duplicate .responsive-container-block.container {
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 768px) {
+  .arch_contact_us_duplicate .input,
+  .arch_contact_us_duplicate .textinput {
+    height: 45px;
+  }
+  .arch_contact_us_duplicate .button {
+    height: 50px;
+  }
+}
+
+@media (max-width: 500px) {
+  .arch_contact_us_duplicate .text-blk.section-head {
+    font-size: 40px;
+  }
+  .arch_contact_us_duplicate .responsive-container-block.big-container {
+    padding: 0 30px;
+  }
+  .arch_contact_us_duplicate .button,
+  .arch_contact_us_duplicate .form-wrapper {
+    margin-bottom: 40px;
+  }
+  .arch_contact_us_duplicate .icon-block {
+    width: 25px;
+    height: 25px;
+  }
+}
