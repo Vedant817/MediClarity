@@ -44,7 +44,7 @@ const Landing = () => {
         </div>
         <div className="image">
           <span className="image__bg"></span>
-          <img src="https://cdn.pixabay.com/photo/2017/01/31/22/32/doctor-2027768_640.png" alt="header image"/>
+          <img src="../Assets/header-bg.png" alt="header image" />
           <div className="image__content image__content__1">
             <span><i className="ri-user-3-line"></i></span>
             <div className="details">
