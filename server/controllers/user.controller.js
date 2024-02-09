@@ -1,5 +1,8 @@
 import { User } from '../models/user.model.js';
 
+
+
+
 const registerUser = async (req, res)=>{
     const {username, email, password} = req.body;
     //! Checking if the data entered is valid or not.
@@ -43,7 +46,11 @@ const loginUser = async (req, res)=>{
         secure: true
     }
     res.status(200).cookie("username", username, options).json({message: "User Logged in Successfully"});
+
+    
 }
+
+
 
 // const logoutUser = async(req, res)=>{
 //     await User.findByIdAndUpdate(req.user._id,{

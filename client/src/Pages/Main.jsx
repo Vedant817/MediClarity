@@ -3,9 +3,41 @@ import './Main.css';
 import Navbar from '../Components/Navbar.jsx';
 import Footer from '../Components/Footer.jsx';
 import Tesseract from 'tesseract.js';
+import axios from 'axios'
 
 const Main = () => {
     const [extractedText, setExtractedText] = useState('');
+    const [image, setimage] = useState('')
+
+    async function uploadImage() {
+        const fileInput = document.getElementById('uploadFile');
+        const file = fileInput.files[0];
+  
+        if (!file) {
+          alert('Please select an image file.');
+          return;
+        }
+  
+        const formData = new FormData();
+        formData.append('image', file);
+  
+        try {
+          const response = await fetch('http://localhost:3000/upload_image', {
+            method: 'POST',
+            body: formData
+          });
+  
+          if (!response.ok) {
+            throw new Error('Upload failed');
+          }
+  
+          alert('Image uploaded successfully!');
+        } catch (error) {
+          console.error('Error uploading image:', error);
+          alert('Failed to upload image.');
+        }
+      }
+
 
     function dragNdrop(event) {
         const file = event.target.files[0];
@@ -45,7 +77,7 @@ const Main = () => {
         document.getElementById('uploadFile').parentNode.className = 'dragBox';
     }
 
-    return (
+return (
         <div>
             <Navbar/>
             <Footer/>
@@ -55,7 +87,7 @@ const Main = () => {
                 <strong>OR</strong>
                 <span className="dragBox" >
                 Drag and Drop image here
-                <input type="file" onChange={dragNdrop}  onDragOver={drag} onDrop={drop} id="uploadFile"  />
+                <input type="file" name='image' onChange={dragNdrop}  onDragOver={drag} onDrop={drop} onChange={uploadImage} id="uploadFile"  />
                 </span>
             </div>
 
