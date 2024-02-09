@@ -15,6 +15,11 @@ const Landing = () => {
     let path = '/about';
     navigate(path);
   }
+  const RoutetoContact = ()=>
+  {
+    let path ='/contact'
+    navigate(path);
+  }
 
   return (
     <div className="container">
@@ -26,7 +31,7 @@ const Landing = () => {
           {/* <li className="link"><a href="#">Courses</a></li> */}
           {/* <li className="link"><a href="#">Pages</a></li> */}
           {/* <li className="link"><a href="#">Blog</a></li> */}
-          <li className="link"><a href="#">Contact</a></li>
+          <li className="link" onClick={RoutetoContact}><a href="#">Contact</a></li>
         </ul>
         <button className="btn" onClick={RoutetoRegister}>Register Now</button>
       </nav>
