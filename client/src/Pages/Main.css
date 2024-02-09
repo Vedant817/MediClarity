@@ -7,6 +7,12 @@
 
   
   }
+  .uploaded-image {
+    width: 50%; /* Set width to 50% */
+    height: 50%; /* Set height to 50% */
+    object-fit: contain !important; /* Ensure that object-fit takes precedence */
+}
+
   .dragBox {
     width: 250px;
     height: 100px;
