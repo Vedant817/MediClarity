@@ -1,9 +1,13 @@
 import React from 'react'
+import Navbar from '../Components/Navbar.jsx';
+import Footer from '../Components/Footer.jsx';
 
 const Main = () => {
   return (
     <div>
-      <p>This is Main</p>
+      <Navbar/>
+      <Footer/>
+      
     </div>
   )
 }
