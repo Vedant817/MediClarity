@@ -51,9 +51,10 @@ nav {
 }
 
 .nav__logo {
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: 2rem;
+  font-weight: 1000;
   color: var(--primary-color);
+  padding-bottom: 10px;
 }
 
 .nav__links {
