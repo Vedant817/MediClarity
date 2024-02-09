@@ -6,6 +6,7 @@ import Tesseract from 'tesseract.js';
 
 const Main = () => {
     const [extractedText, setExtractedText] = useState('');
+    const [imageUrl, setImageUrl] = useState('');
 
     function uploadImage(event) {
         const file = event.target.files[0];
@@ -14,6 +15,12 @@ const Main = () => {
           alert('Please select an image file.');
           return;
         }
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            setImageUrl(event.target.result);
+        };
+        reader.readAsDataURL(file);
 
         // Perform OCR on the image
         Tesseract.recognize(
@@ -38,8 +45,8 @@ const Main = () => {
                 <label htmlFor="uploadFile" className="btn btn-primary">Upload Image</label>
                 <strong>OR</strong>
                 <span className="dragBox" >
-                Drag and Drop image here
-                <input type="file" name='image' onChange={uploadImage} id="uploadFile"  />
+                    Drag and Drop image here
+                    <input type="file" name='image' onChange={uploadImage} id="uploadFile"  />
                 </span>
             </div>
 
@@ -49,8 +56,8 @@ const Main = () => {
                 <div className="card-category-1">
                     <div className="basic-card basic-card-aqua">
                         <div className="card-content">
-                            <span className="card-title"></span>
-                            <p className="card-text"><div id="preview"></div></p> {/* Render extracted text here */}
+                            <span className="card-title">Uploaded Image</span>
+                            {imageUrl && <img src={imageUrl} alt="Uploaded" className="uploaded-image" />}
                         </div>
                         <div className="card-link">
                             <a href="#" title="Read Full"><span></span></a>
@@ -61,7 +68,7 @@ const Main = () => {
                 <div className="card-category-1">
                     <div className="basic-card basic-card-aqua">
                         <div className="card-content">
-                            <span className="card-title"></span>
+                            <span className="card-title">Extracted Text</span>
                             <p className="card-text">{extractedText}</p> {/* Render extracted text here */}
                         </div>
                         <div className="card-link">
