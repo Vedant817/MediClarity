@@ -5,7 +5,7 @@ from collections import Counter
 reader = easyocr.Reader(['en'])
 
 # Read the text from an image file
-result = reader.readtext('C:\\Users\\akshi\\MediClarity\\image_detection\\image3.jpeg')  # Replace 'your_image.png' with the path to your image file
+result = reader.readtext('C:\\Users\\vedan\\Downloads\\MediClarity\\image_detection\\image3.jpeg')  # Replace 'your_image.png' with the path to your image file
 
 # Extract keywords from the detected text
 keywords = []
