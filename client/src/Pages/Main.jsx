@@ -3,81 +3,33 @@ import './Main.css';
 import Navbar from '../Components/Navbar.jsx';
 import Footer from '../Components/Footer.jsx';
 import Tesseract from 'tesseract.js';
-import axios from 'axios'
 
 const Main = () => {
     const [extractedText, setExtractedText] = useState('');
-    const [image, setimage] = useState('')
 
-    async function uploadImage() {
-        const fileInput = document.getElementById('uploadFile');
-        const file = fileInput.files[0];
-  
+    function uploadImage(event) {
+        const file = event.target.files[0];
+
         if (!file) {
           alert('Please select an image file.');
           return;
         }
-  
-        const formData = new FormData();
-        formData.append('image', file);
-  
-        try {
-          const response = await fetch('http://localhost:3000/upload_image', {
-            method: 'POST',
-            body: formData
-          });
-  
-          if (!response.ok) {
-            throw new Error('Upload failed');
-          }
-  
-          alert('Image uploaded successfully!');
-        } catch (error) {
-          console.error('Error uploading image:', error);
-          alert('Failed to upload image.');
-        }
-      }
 
-
-    function dragNdrop(event) {
-        const file = event.target.files[0];
-        const fileName = file.name.toLowerCase();
-        const fileType = fileName.substring(fileName.lastIndexOf('.') + 1);
-        const allowedExtensions = ['jpg', 'jpeg', 'png'];
-
-        // Check if the file type is allowed
-        if (allowedExtensions.includes(fileType)) {
-            const preview = document.getElementById("preview");
-            const previewImg = document.createElement("img");
-            previewImg.setAttribute("src", URL.createObjectURL(file));
-            preview.innerHTML = "";
-            preview.appendChild(previewImg);
-
-            // Perform OCR on the image
-            Tesseract.recognize(
-                file,
-                'eng', // Specify language ('eng' for English)
-                { logger: m => console.log(m) } // Log recognition progress to the console
-            ).then(({ data: { text } }) => {
-                console.log('Extracted text:', text); // Log the extracted text to the console
-                setExtractedText(text); // Set the extracted text in state
-            });
-        } else {
-            alert("Only JPEG and PNG files are allowed!");
-            // Optionally clear the input field
-            event.target.value = '';
-        }
+        // Perform OCR on the image
+        Tesseract.recognize(
+            file,
+            'eng', // Specify language ('eng' for English)
+            { logger: m => console.log(m) } // Log recognition progress to the console
+        ).then(({ data: { text } }) => {
+            console.log('Extracted text:', text); // Log the extracted text to the console
+            setExtractedText(text); // Set the extracted text in state
+        }).catch(error => {
+            console.error('Error performing OCR:', error);
+            alert('Failed to perform OCR.');
+        });
     }
 
-    function drag() {
-        document.getElementById('uploadFile').parentNode.className = 'draging dragBox';
-    }
-
-    function drop() {
-        document.getElementById('uploadFile').parentNode.className = 'dragBox';
-    }
-
-return (
+    return (
         <div>
             <Navbar/>
             <Footer/>
@@ -87,7 +39,7 @@ return (
                 <strong>OR</strong>
                 <span className="dragBox" >
                 Drag and Drop image here
-                <input type="file" name='image' onChange={dragNdrop}  onDragOver={drag} onDrop={drop} onChange={uploadImage} id="uploadFile"  />
+                <input type="file" name='image' onChange={uploadImage} id="uploadFile"  />
                 </span>
             </div>
 
