@@ -14,7 +14,7 @@ const Contact = () => {
 
             <p className="text-blk section-subhead ">
               Unlocking Clarity in Medical Reports: Your Path to Understanding
-              Health and Wellness
+              Health .
             </p>
           </div>
           <div

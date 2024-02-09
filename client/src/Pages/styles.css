@@ -1,18 +1,33 @@
 .arch_contact_us_duplicate {
   font-family: Nunito, sans-serif;
+  max-width: 50%;
+  margin: 20px auto; /* Center the component horizontally and provide equal vertical spacing */
+  background-color: #fdfcea; /* Set background color */
+  border-radius: 20px; /* Add rounded corners */
+  padding: 40px; /* Add internal spacing */
+}
+
+/* Apply same border-radius to inner elements */
+.arch_contact_us_duplicate .icon-block,
+.arch_contact_us_duplicate .input,
+.arch_contact_us_duplicate .textinput,
+.arch_contact_us_duplicate .button,
+.arch_contact_us_duplicate .form-wrapper {
+  border-radius: 20px; /* Apply same border-radius */
 }
 
 .arch_contact_us_duplicate .icon-block {
   width: 30px;
   height: 30px;
   fill: #b0ab4d; /* Apply fill color to social icons */
+  margin: 0 10px; /* Add spacing between icons */
 }
+
 .arch_contact_us_duplicate .contact-header {
   font-weight: bold;
   font-family: 'Your Unique Font', sans-serif; /* Replace 'Your Unique Font' with the name of your desired font */
   text-align: center;
 }
-
 
 .arch_contact_us_duplicate .text-blk {
   margin: 0;
@@ -54,7 +69,7 @@
   width: 100%;
   margin-bottom: 15px;
   height: 54px;
-  border-radius: 5px;
+  border-radius: 20px; /* Apply same border-radius */
   border: 2px solid #767676;
   background-color: #f3f2cf;
   font-size: 16px;
@@ -74,7 +89,7 @@
   color: white;
   background-color: #b0ab4d;
   border: 2px solid #767676;
-  border-radius: 5px;
+  border-radius: 20px; /* Apply same border-radius */
 }
 
 .arch_contact_us_duplicate .form-wrapper {
@@ -84,8 +99,8 @@
 
 .arch_contact_us_duplicate .social-media-icon-container {
   display: flex;
-  max-width: 400px;
-  justify-content: space-evenly;
+  justify-content: center; /* Center the icons horizontally */
+  margin-top: 20px; /* Add spacing from the text */
 }
 
 /* Media Queries */
@@ -123,4 +138,10 @@
     width: 25px;
     height: 25px;
   }
+}
+
+body {
+  background-color: black;
+  margin: 0;
+  padding: 5px; /* Add vertical spacing */
 }
