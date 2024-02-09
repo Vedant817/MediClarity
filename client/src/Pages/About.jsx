@@ -9,7 +9,7 @@ const About = () => {
       <img src="https://raw.githubusercontent.com/pico-india/main-django/main/static/about-team.jpg" alt="" />
     </div>
     <div class="company-info">
-      <span>MediClarity <span class="our">FOR EVERYONE</span></span>
+      <span className='medi'>MediClarity <span class="our">FOR EVERYONE</span></span>
       <p>
         <b>MediClarity</b> is a  medical website that summarizes medical reports could serve various purposes, such as providing patients with simplified explanations of their medical records, offering healthcare professionals with concise summaries of complex cases, or delivering educational content to the general public.
       </p>

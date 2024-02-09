@@ -1,20 +1,34 @@
 import React from 'react';
 import './Landing.css'; // Import your CSS file
+import { useNavigate } from "react-router-dom";
+
 
 const Landing = () => {
+
+  const navigate = useNavigate();
+  const RoutetoRegister = () =>{
+    let path = '/register';
+    navigate(path);
+  }
+
+  const RoutetoAbout = () =>{
+    let path = '/about';
+    navigate(path);
+  }
+
   return (
     <div className="container">
       <nav>
         <div className="nav__logo">MEDICLARITY</div>
         <ul className="nav__links">
           <li className="link"><a href="#">Home</a></li>
-          <li className="link"><a href="#">About Us</a></li>
+          <li className="link" onClick={RoutetoAbout}><a href="#">About Us</a></li>
           {/* <li className="link"><a href="#">Courses</a></li> */}
           {/* <li className="link"><a href="#">Pages</a></li> */}
           {/* <li className="link"><a href="#">Blog</a></li> */}
           <li className="link"><a href="#">Contact</a></li>
         </ul>
-        <button className="btn">Register Now</button>
+        <button className="btn" onClick={RoutetoRegister}>Register Now</button>
       </nav>
       <header className="header">
         <div className="content">
