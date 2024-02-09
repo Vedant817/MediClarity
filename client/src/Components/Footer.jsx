@@ -15,7 +15,7 @@ const Footer = () => {
                 <li class="list-inline-item"><a href="#">Terms</a></li>
                 <li class="list-inline-item"><a href="#">Privacy Policy</a></li>
             </ul>
-            <p class="copyright">Company Name © 2018</p>
+            <p class="copyright">MediClarity © 2024</p>
         </footer>
     </div>
 </div>
