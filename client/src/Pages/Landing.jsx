@@ -21,12 +21,17 @@ const Landing = () => {
     navigate(path);
   }
 
+  const RoutetoMain = ()=>{
+    let path = '/'
+    navigate(path)
+  }
+
   return (
     <div className="container">
       <nav>
         <div className="nav__logo">MEDICLARITY</div>
         <ul className="nav__links">
-          <li className="link"><a href="#">Home</a></li>
+          <li className="link" onClick={RoutetoMain}><a href="#">Home</a></li>
           <li className="link" onClick={RoutetoAbout}><a href="#">About Us</a></li>
           {/* <li className="link"><a href="#">Courses</a></li> */}
           {/* <li className="link"><a href="#">Pages</a></li> */}
@@ -49,15 +54,15 @@ const Landing = () => {
         </div>
         <div className="image">
           <span className="image__bg"></span>
-          <img src="../Assets/header-bg.png" alt="header image" />
-          <div className="image__content image__content__1">
+          <img src="https://cdn.pixabay.com/photo/2017/01/31/22/32/doctor-2027768_640.png" alt="header image" />
+          {/* <div className="image__content image__content__1">
             <span><i className="ri-user-3-line"></i></span>
-            <div className="details">
+            {/* <div className="details">
               <h4>1520+</h4>
               <p>Active Clients</p>
-            </div>
-          </div>
-          <div className="image__content image__content__2">
+            </div> */}
+          {/* </div> */}
+          {/* <div className="image__content image__content__2">
             <ul>
               <li>
                 <span><i className="ri-check-line"></i></span>
@@ -68,7 +73,7 @@ const Landing = () => {
                 Expert Doctors
               </li>
             </ul>
-          </div>
+          </div> */}
         </div>
       </header>
     </div>

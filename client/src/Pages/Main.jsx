@@ -29,7 +29,7 @@ function drop() {
      <label for="uploadFile" class="btn btn-primary">Upload Image</label>
       <strong>OR</strong>
       <span class="dragBox" >
-      Darg and Drop image here
+      Drag and Drop image here
       <input type="file" onChange={dragNdrop}  ondragover={drag} ondrop={drop} id="uploadFile"  />
       </span>
       </div>
