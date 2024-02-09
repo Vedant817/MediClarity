@@ -17,7 +17,10 @@ for detection in result:
 
 # Count the frequency of each keyword
 keyword_counts = Counter(keywords)
+keywords_list=[]
 
 # Print the keywords and their frequencies
 for keyword, count in keyword_counts.items():
-    print(f"{keyword}")
+    keywords_list.append(keyword)
+    # print(f"{keyword}")
+    # print(prompt)
