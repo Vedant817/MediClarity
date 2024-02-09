@@ -4,8 +4,16 @@
     strong {
       padding: 0 10px
     }
-    
+
+  
   }
+  .uploaded-image {
+    width: 85%; /* Set width to 50% */
+    height: 80%; /* Set height to 50% */
+    object-fit: contain !important;
+    margin-top: 30%; /* Ensure that object-fit takes precedence */
+}
+
   .dragBox {
     width: 250px;
     height: 100px;

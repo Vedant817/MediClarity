@@ -3,40 +3,81 @@ import './Main.css';
 import Navbar from '../Components/Navbar.jsx';
 import Footer from '../Components/Footer.jsx';
 import Tesseract from 'tesseract.js';
+import axios from 'axios'
 
 const Main = () => {
     const [extractedText, setExtractedText] = useState('');
-    const [imageUrl, setImageUrl] = useState('');
+    const [image, setimage] = useState('')
 
-    function uploadImage(event) {
-        const file = event.target.files[0];
-
+    async function uploadImage() {
+        const fileInput = document.getElementById('uploadFile');
+        const file = fileInput.files[0];
+  
         if (!file) {
           alert('Please select an image file.');
           return;
         }
+  
+        const formData = new FormData();
+        formData.append('image', file);
+  
+        try {
+          const response = await fetch('http://localhost:3000/upload_image', {
+            method: 'POST',
+            body: formData
+          });
+  
+          if (!response.ok) {
+            throw new Error('Upload failed');
+          }
+  
+          alert('Image uploaded successfully!');
+        } catch (error) {
+          console.error('Error uploading image:', error);
+          alert('Failed to upload image.');
+        }
+      }
 
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            setImageUrl(event.target.result);
-        };
-        reader.readAsDataURL(file);
 
-        // Perform OCR on the image
-        Tesseract.recognize(
-            file,
-            'eng', // Specify language ('eng' for English)
-            { logger: m => console.log(m) } // Log recognition progress to the console
-        ).then(({ data: { text } }) => {
-            console.log('Extracted text:', text); // Log the extracted text to the console
-            setExtractedText(text); // Set the extracted text in state
-        }).catch(error => {
-            console.error('Error performing OCR:', error);
-            alert('Failed to perform OCR.');
-        });
+    function dragNdrop(event) {
+        const file = event.target.files[0];
+        const fileName = file.name.toLowerCase();
+        const fileType = fileName.substring(fileName.lastIndexOf('.') + 1);
+        const allowedExtensions = ['jpg', 'jpeg', 'png'];
+
+        // Check if the file type is allowed
+        if (allowedExtensions.includes(fileType)) {
+            const preview = document.getElementById("preview");
+            const previewImg = document.createElement("img");
+            previewImg.setAttribute("src", URL.createObjectURL(file));
+            preview.innerHTML = "";
+            preview.appendChild(previewImg);
+
+            // Perform OCR on the image
+            Tesseract.recognize(
+                file,
+                'eng', // Specify language ('eng' for English)
+                { logger: m => console.log(m) } // Log recognition progress to the console
+            ).then(({ data: { text } }) => {
+                console.log('Extracted text:', text); // Log the extracted text to the console
+                setExtractedText(text); // Set the extracted text in state
+            });
+        } else {
+            alert("Only JPEG and PNG files are allowed!");
+            // Optionally clear the input field
+            event.target.value = '';
+        }
     }
 
-    return (
+    function drag() {
+        document.getElementById('uploadFile').parentNode.className = 'draging dragBox';
+    }
+
+    function drop() {
+        document.getElementById('uploadFile').parentNode.className = 'dragBox';
+    }
+
+return (
         <div>
             <Navbar/>
             <Footer/>
@@ -45,20 +86,21 @@ const Main = () => {
                 <label htmlFor="uploadFile" className="btn btn-primary">Upload Image</label>
                 <strong>OR</strong>
                 <span className="dragBox" >
-                    Drag and Drop image here
-                    <input type="file" name='image' onChange={uploadImage} id="uploadFile"  />
+                Drag and Drop image here
+                <input type="file" name='image' onChange={dragNdrop}  onDragOver={drag} onDrop={drop} onChange={uploadImage} id="uploadFile"  />
                 </span>
             </div>
 
             <div className="category-name"></div> <br/>
                     
-            <div className="card-container">
-                <div className="card-category-1">
-                    <div className="basic-card basic-card-aqua">
-                        <div className="card-content">
-                            <span className="card-title">Uploaded Image</span>
-                            {imageUrl && <img src={imageUrl} alt="Uploaded" className="uploaded-image" />}
-                        </div>
+            <div className="card-category-1">
+                        
+                <div className="basic-card basic-card-aqua">
+                    <div className="card-content">
+                        <span className="card-title"></span>
+                        <p className="card-text"><div id="preview"></div></p> {/* Render extracted text here */}
+                    </div>
+
                         <div className="card-link">
                             <a href="#" title="Read Full"><span></span></a>
                         </div>
@@ -66,17 +108,19 @@ const Main = () => {
                 </div>
 
                 <div className="card-category-1">
-                    <div className="basic-card basic-card-aqua">
-                        <div className="card-content">
-                            <span className="card-title">Extracted Text</span>
-                            <p className="card-text">{extractedText}</p> {/* Render extracted text here */}
-                        </div>
+                        
+                <div className="basic-card basic-card-aqua">
+                    <div className="card-content">
+                        <span className="card-title"></span>
+                        <p className="card-text">{extractedText}</p> {/* Render extracted text here */}
+                    </div>
+
                         <div className="card-link">
                             <a href="#" title="Read Full"><span></span></a>
                         </div>
                     </div>
                 </div>
-            </div>
+            
         </div>
     );
 }
