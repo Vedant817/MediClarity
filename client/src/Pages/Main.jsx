@@ -57,7 +57,7 @@ const Main = () => {
                     <div className="basic-card basic-card-aqua">
                         <div className="card-content">
                             <span className="card-title">Uploaded Image</span>
-                            {imageUrl && <img src={imageUrl} alt="Uploaded" className="uploaded-image" />}
+                            {imageUrl && <img src={imageUrl} alt="Uploaded" className="uploaded-image" style={{ objectFit:'contain'}} />}
                         </div>
                         <div className="card-link">
                             <a href="#" title="Read Full"><span></span></a>
