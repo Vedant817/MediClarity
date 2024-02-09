@@ -16,6 +16,7 @@ body {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
+  margin-left: 0px;
 }
 
 .company-info {
@@ -26,16 +27,17 @@ body {
 
 .img {
   width: 100%;
-  margin: 1rem 0rem 0rem 2rem;
+  margin: 7rem 4rem 0rem 2rem;
 }
 
 .img img {
   width: 100%;
+  border-radius: 50%;
 }
 
 .company-info {
   width: 100%;
-  margin-right: 4rem;
+  margin-right: 2rem;
 }
 
 .company-info span {
@@ -49,6 +51,12 @@ body {
 
 .company-info p{
   font-size: 1.1rem;
+  color: white;
+}
+
+.medi{
+  color: #5eff0e;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 /* ----------------------------------------------- */
 
