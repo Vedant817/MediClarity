@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import Tesseract from 'tesseract.js';
 
 const app = express();
 
