@@ -9,28 +9,28 @@ const Main = () => {
     const [extractedText, setExtractedText] = useState('');
     const [image, setimage] = useState('')
 
-    
 
-      const Summary = async()=>{
+
+    const Summary = async () => {
         try {
-            let response = await fetch('http://localhost:3000/textfile',{
-            method:'GET',
-        });
+            let response = await fetch('http://localhost:3000/textfile', {
+                method: 'GET',
+            });
 
-        if(!response.ok){
-            throw new Error('Failed')
-        }
+            if (!response.ok) {
+                throw new Error('Failed')
+            }
 
-        return response.text();
-           
+            return response.text();
+
         } catch (error) {
             console.error('Error uploading image:', error);
             alert('Failed to upload image.');
-          }
-    
-      }
+        }
 
-      const displayResponse = async () => {
+    }
+
+    const displayResponse = async () => {
         try {
             const summary = await Summary();
             const divElement = document.getElementById('preview');
@@ -76,34 +76,34 @@ const Main = () => {
     async function uploadImage() {
         const fileInput = document.getElementById('uploadFile');
         const file = fileInput.files[0];
-  
+
         if (!file) {
-          alert('Please select an image file.');
-          return;
-        }
-  
-        const formData = new FormData();
-        formData.append('image', file);
-  
-        try {
-          const response = await fetch('http://localhost:3000/upload_image', {
-            method: 'POST',
-            body: formData
-          });
-  
-          if (!response.ok) {
-            throw new Error('Upload failed');
-          }
-          alert('Image uploaded successfully!');
-          displayResponse();
-         
-        } catch (error) {
-          console.error('Error uploading image:', error);
-          alert('Failed to upload image.');
+            alert('Please select an image file.');
+            return;
         }
 
-      }
-      
+        const formData = new FormData();
+        formData.append('image', file);
+
+        try {
+            const response = await fetch('http://localhost:3000/upload_image', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Upload failed');
+            }
+            alert('Image uploaded successfully!');
+            displayResponse();
+
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            alert('Failed to upload image.');
+        }
+
+    }
+
 
     function drag() {
         document.getElementById('uploadFile').parentNode.className = 'draging dragBox';
@@ -113,21 +113,21 @@ const Main = () => {
         document.getElementById('uploadFile').parentNode.className = 'dragBox';
     }
 
-return (
+    return (
         <div>
-            <Navbar/>
-            <Footer/>
-            
+            <Navbar />
+            <Footer />
+
             <div className="uploadOuter">
                 <label htmlFor="uploadFile" className="btn btn-primary">Upload Image</label>
                 <strong>OR</strong>
                 <span className="dragBox" >
-                Drag and Drop image here
-                <input type="file" name='image'  onDragOver={drag} onDrop={drop} onChange={uploadImage} id="uploadFile"  />
+                    Drag and Drop image here
+                    <input type="file" name='image' onDragOver={drag} onDrop={drop} onChange={uploadImage} id="uploadFile" />
                 </span>
             </div>
 
-            <div className="category-name"></div> 
+            <div className="category-name"></div>
 
             <div className='big-card'>
                 {/* <div className="card-category-1">
@@ -137,7 +137,7 @@ return (
                                 <span className="card-title">Upload Image</span>
                                 <br/>
                                 <p className="card-text"><div id="preview"></div></p> {/* Render extracted text here */}
-                            {/* </div>
+                {/* </div>
         
                                 <div className="card-link">
                                     <a href="#" title="Read Full"><span></span></a>
@@ -146,25 +146,25 @@ return (
         
                             
                         </div>
-         */} 
-                        <div className="card-category-1">
-                                
-                        <div className="basic-card basic-card-aqua">
-                            <div className="card-content">
-                                <span className="card-title">Extracted Text</span>
-                                <br/>
-                                <p className="card-text"><div id="preview"></div></p> {/* Render extracted text here */}
-                            </div>
-        
-                                <div className="card-link">
-                                    <a href="#" title="Read Full"><span></span></a>
-                                </div>
-                            </div>
-        
-                            
-                        </div></div>  
-            
-            
+         */}
+                <div className="card-category-1">
+
+                    <div className="basic-card basic-card-aqua">
+                        <div className="card-content">
+                            <span className="card-title">Extracted Text</span>
+                            <br />
+                            <p className="card-text"><div id="preview"></div></p> {/* Render extracted text here */}
+                        </div>
+
+                        <div className="card-link">
+                            <a href="#" title="Read Full"><span></span></a>
+                        </div>
+                    </div>
+
+
+                </div></div>
+
+
         </div>
     );
 }

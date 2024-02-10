@@ -55,7 +55,7 @@ app.post("/upload_image", upload.single("image"), (req, res) => {
       const result = stdout
       const folderName = 'C:\Users\vedan\Downloads\MediClarity\server\ConvertedText'
       const fileName = 'text.txt'
-      const filePath = path.join(__dirname, folderName, fileName);
+      const filePath = './ConvertedText/text.txt'
       fs.writeFile(filePath, result, (err) => {
         console.log('Error saving file: ', err);
         res.status(500).send('Error saving the file')

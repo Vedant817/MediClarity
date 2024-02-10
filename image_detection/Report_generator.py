@@ -1,7 +1,8 @@
 from openai import OpenAI
 from Keyword_generator import keywords_list
+import os
 
-client = OpenAI(api_key="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")
+client = OpenAI(api_key=os.environ("OPENAI_API_KEY"))
 
 prompt = ""
 for keywords in keywords_list:
