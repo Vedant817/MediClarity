@@ -1,8 +1,7 @@
-/ConvertedText
-
-/Images
-
-/node_modules
-
 /.env
 
+ConvertedText
+
+Images
+
+/node_modules
