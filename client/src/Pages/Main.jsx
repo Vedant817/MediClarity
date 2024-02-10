@@ -94,14 +94,14 @@ return (
             <div className="category-name"></div> 
 
             <div className='big-card'>
-                <div className="card-category-1">
+                {/* <div className="card-category-1">
                         
                         <div className="basic-card basic-card-aqua">
                             <div className="card-content">
                                 <span className="card-title">Upload Image</span>
                                 <br/>
                                 <p className="card-text"><div id="preview"></div></p> {/* Render extracted text here */}
-                            </div>
+                            {/* </div>
         
                                 <div className="card-link">
                                     <a href="#" title="Read Full"><span></span></a>
@@ -110,7 +110,7 @@ return (
         
                             
                         </div>
-        
+         */} 
                         <div className="card-category-1">
                                 
                         <div className="basic-card basic-card-aqua">
