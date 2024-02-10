@@ -22,7 +22,7 @@ const Landing = () => {
   }
 
   const RoutetoMain = ()=>{
-    let path = '/'
+    let path = '/main'
     navigate(path)
   }
 
