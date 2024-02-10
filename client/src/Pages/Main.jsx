@@ -9,35 +9,7 @@ const Main = () => {
     const [extractedText, setExtractedText] = useState('');
     const [image, setimage] = useState('')
 
-    async function uploadImage() {
-        const fileInput = document.getElementById('uploadFile');
-        const file = fileInput.files[0];
-  
-        if (!file) {
-          alert('Please select an image file.');
-          return;
-        }
-  
-        const formData = new FormData();
-        formData.append('image', file);
-  
-        try {
-          const response = await fetch('http://localhost:3000/upload_image', {
-            method: 'POST',
-            body: formData
-          });
-  
-          if (!response.ok) {
-            throw new Error('Upload failed');
-          }
-  
-          alert('Image uploaded successfully!');
-        } catch (error) {
-          console.error('Error uploading image:', error);
-          alert('Failed to upload image.');
-        }
-      }
-      
+    
 
       const Summary = async()=>{
         try {
@@ -57,6 +29,17 @@ const Main = () => {
           }
     
       }
+
+      const displayResponse = async () => {
+        try {
+            const summary = await Summary();
+            const divElement = document.getElementById('preview');
+            divElement.innerHTML = summary;
+        } catch (error) {
+            console.error('Error displaying response:', error);
+            // Handle error if needed
+        }
+    }
 
 
     function dragNdrop(event) {
@@ -88,6 +71,39 @@ const Main = () => {
             event.target.value = '';
         }
     }
+
+
+    async function uploadImage() {
+        const fileInput = document.getElementById('uploadFile');
+        const file = fileInput.files[0];
+  
+        if (!file) {
+          alert('Please select an image file.');
+          return;
+        }
+  
+        const formData = new FormData();
+        formData.append('image', file);
+  
+        try {
+          const response = await fetch('http://localhost:3000/upload_image', {
+            method: 'POST',
+            body: formData
+          });
+  
+          if (!response.ok) {
+            throw new Error('Upload failed');
+          }
+          alert('Image uploaded successfully!');
+          displayResponse();
+         
+        } catch (error) {
+          console.error('Error uploading image:', error);
+          alert('Failed to upload image.');
+        }
+
+      }
+      
 
     function drag() {
         document.getElementById('uploadFile').parentNode.className = 'draging dragBox';
@@ -137,7 +153,7 @@ return (
                             <div className="card-content">
                                 <span className="card-title">Extracted Text</span>
                                 <br/>
-                                <p className="card-text" onChange={Summary}><div id="preview"></div></p> {/* Render extracted text here */}
+                                <p className="card-text"><div id="preview"></div></p> {/* Render extracted text here */}
                             </div>
         
                                 <div className="card-link">

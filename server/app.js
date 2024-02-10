@@ -35,6 +35,7 @@ app.use(cookieParser())
 
 import userRouter from './routes/user.route.js'
 app.use('/api/v1/users', userRouter)
+
 app.post("/upload_image",upload.single("image"),(req,res)=>{
     try {
         if (!req.file) {
@@ -51,7 +52,7 @@ app.post("/upload_image",upload.single("image"),(req,res)=>{
 })
 
 app.get('/textfile', (req, res) => {
-  fs.readFile('./Images/', 'utf8', (err, data) => {
+  fs.readFile('./ConvertedText/text.txt', 'utf8', (err, data) => {
       if (err) {
           res.status(500).send('Error reading the file');
           return;
