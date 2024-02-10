@@ -14,7 +14,7 @@ const Main = () => {
       const Summary = async()=>{
         try {
             let response = await fetch('http://localhost:3000/textfile',{
-            method:'POST',
+            method:'GET',
         });
 
         if(!response.ok){
