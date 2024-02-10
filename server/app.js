@@ -4,14 +4,18 @@ import cookieParser from 'cookie-parser';
 import Tesseract from 'tesseract.js';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
+
+let uploadCount = 0;
 
 const storage = multer.diskStorage({
     destination:(req,file,cb)=>{
         cb(null,'Images/')
     },
     filename:(req,file,cb) =>{
-        console.log(file);
-        cb(null,Date.now() + path.extname(file.originalname))
+      uploadCount++;
+      console.log(file);
+      cb(null,'myfile.png');
     }
 })
 
@@ -45,5 +49,15 @@ app.post("/upload_image",upload.single("image"),(req,res)=>{
         res.status(500).send('Upload failed.');
       }
 })
+
+app.get('/textfile', (req, res) => {
+  fs.readFile('./Images/', 'utf8', (err, data) => {
+      if (err) {
+          res.status(500).send('Error reading the file');
+          return;
+      }
+      res.send(data);
+  });
+});
 
 export {app};

@@ -37,6 +37,26 @@ const Main = () => {
           alert('Failed to upload image.');
         }
       }
+      
+
+      const Summary = async()=>{
+        try {
+            let response = await fetch('http://localhost:3000/textfile',{
+            method:'POST',
+        });
+
+        if(!response.ok){
+            throw new Error('Failed')
+        }
+
+        return response.text();
+           
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            alert('Failed to upload image.');
+          }
+    
+      }
 
 
     function dragNdrop(event) {
@@ -87,7 +107,7 @@ return (
                 <strong>OR</strong>
                 <span className="dragBox" >
                 Drag and Drop image here
-                <input type="file" name='image' onChange={dragNdrop}  onDragOver={drag} onDrop={drop} onChange={uploadImage} id="uploadFile"  />
+                <input type="file" name='image'  onDragOver={drag} onDrop={drop} onChange={uploadImage} id="uploadFile"  />
                 </span>
             </div>
 
@@ -117,7 +137,7 @@ return (
                             <div className="card-content">
                                 <span className="card-title">Extracted Text</span>
                                 <br/>
-                                <p className="card-text"><div id="preview"></div></p> {/* Render extracted text here */}
+                                <p className="card-text" onChange={Summary}><div id="preview"></div></p> {/* Render extracted text here */}
                             </div>
         
                                 <div className="card-link">
