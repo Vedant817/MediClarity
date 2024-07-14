@@ -19,7 +19,7 @@ const Main = () => {
             <div className='flex-grow flex flex-col items-center justify-center p-8 space-y-12'>
                 <div className="text-center space-y-3">
                     <h1 className="text-4xl font-bold text-[#28bf96]">Upload your Medical Report</h1>
-                    <p className="text-xl">Report should be in PDF/Image format.</p>
+                    <p className="text-xl">Report should be in PDF format.</p>
                 </div>
                 <div className='w-full max-w-2xl bg-white shadow-lg rounded-xl p-8'>
                     <form className='space-y-6' onSubmit={generateResponse}>
