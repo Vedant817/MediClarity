@@ -26,6 +26,7 @@
     "nodemon": "^3.0.3",
     "pdf.js-extract": "^0.2.1",
     "resend": "^3.4.0",
-    "tesseract.js": "^2.1.5"
+    "tesseract.js": "^2.1.5",
+    "uuid": "^10.0.0"
   }
 }
