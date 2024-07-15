@@ -6,7 +6,7 @@ const storage = multer.diskStorage({
         cb(null, './public/temp');
     },
     filename: function (req, file, cb) {
-        const fileName = `${uuidv4()}.pdf`
+        const fileName = `${uuidv4()}.txt`
         cb(null, fileName);
     }
 })
