@@ -69,7 +69,7 @@ const Main = () => {
                             </div>
                         </div>
                         <div className="flex justify-center">
-                            <button type="submit" className="bg-[#28bf96] text-white font-bold py-3 px-8 rounded-lg hover:bg-[#1a876a] transition duration-300">Send Message</button>
+                            <button type="submit" className="bg-[#28bf96] text-white font-bold py-3 px-8 rounded-lg hover:bg-[#1a876a] transition duration-300">Generate</button>
                         </div>
                         {result && (
                             <div className='flex justify-center text-lg text-center text-black'>
