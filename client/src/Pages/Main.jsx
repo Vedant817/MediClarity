@@ -5,6 +5,7 @@ import Navbar from '../Components/Navbar';
 const Main = () => {
     const [fileName, setFileName] = useState(null);
     const [file, setFile] = useState(null);
+    const [result, setResult] = useState(null);
 
     const handleFileChange = (event) => {
         if (event.target.files[0]) {
@@ -33,10 +34,11 @@ const Main = () => {
                 body: formData,
             });
             const data = await response.json();
+            console.log(data)
             if (response.ok) {
-                console.log('File Uploaded', data);
+                setResult(data);
             } else {
-                console.error('Failed to upload the file', data.error);
+                console.error('Unable to get the response');
             }
         } catch (error) {
             console.error('An error occurred in generating response.', error);
@@ -44,7 +46,7 @@ const Main = () => {
     }
 
     return (
-        <div className='h-screen w-full'>
+        <div className='min-h-screen w-full'>
             <Navbar />
             <div className='flex-grow flex flex-col items-center justify-center p-8 space-y-12'>
                 <div className="text-center space-y-3">
@@ -68,6 +70,11 @@ const Main = () => {
                         <div className="flex justify-center">
                             <button type="submit" className="bg-[#28bf96] text-white font-bold py-3 px-8 rounded-lg hover:bg-[#1a876a] transition duration-300">Send Message</button>
                         </div>
+                        {result && (
+                            <div className='flex justify-center text-lg text-center text-black'>
+                                <p>{result}</p>
+                            </div>
+                        )}
                     </form>
                 </div>
             </div>
