@@ -4,8 +4,8 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { PDFExtract } from 'pdf.js-extract'
 import * as fs from 'fs/promises';
-import path from 'path';
 import upload from './middlewares/multer.middleware.js'
+import { FunctionDeclarationSchemaType, HarmBlockThreshold, HarmCategory, VertexAI } from '@google-cloud/vertexai'
 dotenv.config();
 
 const app = express();
@@ -14,9 +14,21 @@ app.use(cors({
     origin: 'http://localhost:3000'
 }));
 app.use(express.json());
-// app.use('/api/upload-file', express.raw({ type: 'application/pdf', limit: '10mb' }));
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const project = 'mediclarity';
+const location = 'us-central1';
+const textModel = 'gemini-1.5-pro-001';
+const vertexAI = new VertexAI({ project: project, location: location });
+const generativeModel = vertexAI.getGenerativeModel({
+    model: textModel,
+    generationConfig: {
+        'maxOutputTokens': 8192,
+        'temperature': 1,
+        'topP': 0.95,
+    }
+})
+const prompt = `You are a medical report summarizer. You will be provided with the array of keyword extracted from the medical report uploaded by the user, you need to analyse them and give the response in such a way that normal person without the medical knowledge also understands it. Please also add what will happen if values are out of given range. Try to give the response in points and prettier format so that it is easy to understand.`
 
 app.post('/api/send-email', async (req, res) => {
     try {
@@ -57,7 +69,7 @@ app.post('/api/send-email', async (req, res) => {
     }
 });
 
-app.post('/api/upload-file', (req, res, next) => {
+app.post('/api/upload-file', async (req, res, next) => {
     console.log('Headers: ', req.headers);
     console.log('Request Body: ', req.body)
     next()
@@ -67,15 +79,34 @@ app.post('/api/upload-file', (req, res, next) => {
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
-
         const filepath = req.file.path;
         console.log(filepath)
-
         try {
             const data = await pdfExtract.extract(filepath, {});
+            const content = data.pages[0].content
+            const keywordsArray = []
+            content.map((obj) => {
+                const word = obj.str.trim();
+                if (word != '') {
+                    keywordsArray.push(word)
+                }
+            })
+            const keywords = keywordsArray.join(', ')
+            const request = {
+                contents: [{
+                    role: 'user',
+                    parts: [{
+                        text: `${prompt}\n\nKeywords: ${keywords}`
+                    }]
+                }]
+            }
+            const result = await generativeModel.generateContent(request);
+            const response = result.response
+            console.log(JSON.stringify(response))
+
             //? Delete the temporary file
             await fs.unlink(filepath);
-            res.status(200).json(data);
+            res.status(200).json(keywords); //TODO: Return the response.
         } catch (extractError) {
             console.error(extractError);
             try {
