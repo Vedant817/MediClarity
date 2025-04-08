@@ -4,9 +4,9 @@ import { Link } from 'react-router-dom';
 
 const Landing = () => {
   return (
-    <div className="w-full h-screen my-2">
+    <div className="w-full h-screen">
       <Navbar />
-      <main className="flex items-center justify-between p-6 m-4 h-4/5">
+      <main className="flex items-center justify-between p-6 h-[calc(100%-4rem)]">
         <div className="w-1/2">
           <div className='text-6xl font-bold my-2'>
             <h1>Get Quick</h1>

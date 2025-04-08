@@ -1,6 +1,9 @@
 /* eslint-disable no-unused-vars */
 import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import Navbar from '../Components/Navbar';
+import html2pdf from 'html2pdf.js';
+import showdown from 'showdown';
 
 const Main = () => {
     const [fileName, setFileName] = useState(null);
@@ -15,6 +18,41 @@ const Main = () => {
             setFile(null);
             setFileName(null);
         }
+    };
+
+    const downloadPDF = () => {
+        const rawMarkdown = result?.analysis;
+    
+        if (!rawMarkdown) {
+            alert("No content to export!");
+            return;
+        }
+    
+        // Convert Markdown to HTML
+        const converter = new showdown.Converter(); // <-- make sure to import showdown
+        const htmlContent = converter.makeHtml(rawMarkdown);
+    
+        // Create printable element
+        const element = document.createElement('div');
+        element.innerHTML = `
+            <div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6;">
+                <h1 style="color: #28bf96; text-align: center; margin-bottom: 30px;">Test PDF</h1>
+                ${htmlContent}
+            </div>
+        `;
+        document.body.appendChild(element);
+    
+        const opt = {
+            margin: 0.5,
+            filename: 'medical-report-analysis.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+    
+        html2pdf().set(opt).from(element).save().then(() => {
+            element.remove(); // Clean up after PDF is saved
+        });
     };
 
     const generateResponse = async (e) => {
@@ -35,7 +73,6 @@ const Main = () => {
                 body: formData,
             });
             const data = await response.json();
-            console.log(data)
             if (response.ok) {
                 setResult(data);
             } else {
@@ -68,14 +105,33 @@ const Main = () => {
                                 </div>
                             </div>
                         </div>
-                        <div className="flex justify-center">
+                        <div className="flex justify-center space-x-4">
                             <button type="submit" className="bg-[#28bf96] text-white font-bold py-3 px-8 rounded-lg hover:bg-[#1a876a] transition duration-300">Generate</button>
+                            <button
+                                type="button"
+                                onClick={downloadPDF}
+                                disabled={!result}
+                                className={`font-bold py-3 px-8 rounded-lg transition duration-300 ${result ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                            >
+                                Download PDF
+                            </button>
                         </div>
                         {result && (
-                            <div className='flex justify-center text-lg text-center text-black'>
-                                <p>{result}</p>
-                            </div>
+                            <>
+                                <div className='mt-8 text-black'>
+                                    <div className='prose prose-lg max-w-none h-96 overflow-y-auto p-4 border border-gray-300 rounded-md shadow-inner'>
+                                        <ReactMarkdown>{result.analysis}</ReactMarkdown>
+                                    </div>
+                                </div>
+                                {/* Hidden div for PDF generation with full content */}
+                                <div id="result-content" className='hidden'>
+                                    <div className='prose prose-lg max-w-none p-4'>
+                                        <ReactMarkdown>{result.analysis}</ReactMarkdown>
+                                    </div>
+                                </div>
+                            </>
                         )}
+
                     </form>
                 </div>
             </div>
