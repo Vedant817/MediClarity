@@ -5,7 +5,7 @@ import dotenv from 'dotenv'
 import { PDFExtract } from 'pdf.js-extract'
 import * as fs from 'fs/promises';
 import upload from './middlewares/multer.middleware.js'
-import { FunctionDeclarationSchemaType, HarmBlockThreshold, HarmCategory, VertexAI } from '@google-cloud/vertexai'
+import { GoogleGenAI } from '@google/genai'
 dotenv.config();
 
 const app = express();
@@ -16,18 +16,7 @@ app.use(cors({
 app.use(express.json());
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const project = 'mediclarity';
-const location = 'us-central1';
-const textModel = 'gemini-1.5-pro-001';
-const vertexAI = new VertexAI({ project: project, location: location });
-const generativeModel = vertexAI.getGenerativeModel({
-    model: textModel,
-    generationConfig: {
-        'maxOutputTokens': 8192,
-        'temperature': 1,
-        'topP': 0.95,
-    }
-})
+const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
 const prompt = `You are an AI assistant specializing in medical report interpretation. Your task is to analyze an array of keywords extracted from a user-uploaded medical report and provide a clear, easily understandable summary. Your response should:
 
 1. Be tailored for individuals without medical expertise
@@ -84,17 +73,13 @@ app.post('/api/send-email', async (req, res) => {
 });
 
 app.post('/api/upload-file', async (req, res, next) => {
-    console.log('Headers: ', req.headers);
-    console.log('Request Body: ', req.body)
     next()
 }, upload.single('file'), async (req, res) => {
     try {
-        console.log(req)
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
         const filepath = req.file.path;
-        console.log(filepath)
         try {
             const data = await pdfExtract.extract(filepath, {});
             const content = data.pages[0].content
@@ -106,29 +91,22 @@ app.post('/api/upload-file', async (req, res, next) => {
                 }
             })
             const keywords = keywordsArray.join(', ')
-            const request = {
-                contents: [{
-                    role: 'user',
-                    parts: [{
-                        text: `${prompt}\n\nKeywords: ${keywords}`
-                    }]
-                }]
-            }
-            const result = await generativeModel.generateContent(request);
-            const response = result.response
-            console.log(response)
-            console.log(JSON.stringify(response))
-
-            //? Delete the temporary file
+            const result = await ai.models.generateContent({
+                model: 'gemini-2.0-flash',
+                contents: `${prompt}\n\nKeywords: ${keywords}`
+            });
+            
+            const response = result.text
             await fs.unlink(filepath);
-            res.status(200).json(keywords); //TODO: Return the response.
+            res.status(200).json({ keywords, analysis: response });
         } catch (extractError) {
-            console.error(extractError);
+            console.error('Failed to extract keywords from the PDF file.', extractError);
             try {
                 await fs.unlink(filepath);
             } catch (unlinkError) {
                 console.error('Failed to delete the temporary file.', unlinkError);
             }
+            res.status(500).json({ error: 'Failed to process the PDF file' });
         }
     } catch (error) {
         res.status(500).json({ error: 'An error occurred while uploading the file' });
@@ -136,4 +114,23 @@ app.post('/api/upload-file', async (req, res, next) => {
 })
 
 const PORT = process.env.PORT || 5000;
+app.post('/api/generate', async (req, res) => {
+    try {
+        const { prompt } = req.body;
+        if (!prompt) {
+            return res.status(400).json({ error: 'Prompt is required' });
+        }
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents: prompt
+        });
+
+        res.json({ text: response.text });
+    } catch (error) {
+        console.error('Generation error:', error);
+        res.status(500).json({ error: 'An error occurred while generating the content' });
+    }
+});
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
