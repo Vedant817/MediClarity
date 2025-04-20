@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Markdown from 'react-markdown'
+import ChatWithAI from "@/components/ChatWithAi";
 
 export default function UploadReportPage() {
     const [file, setFile] = useState<File | null>(null);
@@ -16,6 +17,8 @@ export default function UploadReportPage() {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadStatus, setUploadStatus] = useState<string | null>(null);
     const [ocrResult, setOcrResult] = useState<string | null>(null);
+    const [summary, setSummary] = useState<string | null>(null);
+    const [showChat, setShowChat] = useState(false);
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) return;
@@ -75,7 +78,7 @@ export default function UploadReportPage() {
                 setUploadStatus("success");
 
                 toast.success("Upload successful", {
-                    description: "Your report has been uploaded successfully."
+                    description: "Your report has been uploaded successfully.",
                 });
 
                 const ocrResponse = await fetch("/api/ocr", {
@@ -87,16 +90,36 @@ export default function UploadReportPage() {
                 });
 
                 const ocrData = await ocrResponse.json();
-                console.log(ocrData.extractedText);
 
-                if (ocrData) {
-                    const fullText = ocrData.extractedText.map(page => page.text).join("\n\n");
-
+                if (ocrData && ocrData.extractedText) {
+                    const fullText = ocrData.extractedText.map((page) => page.text).join("\n\n");
                     setOcrResult(fullText);
 
                     toast.success("OCR extraction successful", {
                         description: "Text has been successfully extracted from the document.",
                     });
+
+                    const summaryResponse = await fetch("/api/summaries", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ text: fullText }),
+                    });
+
+                    const summaryData = await summaryResponse.json();
+
+                    if (summaryData.summary) {
+                        setSummary(summaryData.summary);
+                        toast.success("Summary generated successfully", {
+                            description: "The summary has been generated from the extracted text.",
+                        });
+                    } else {
+                        toast.error("Summary failed", {
+                            description: "Could not generate summary from extracted text.",
+                        });
+                    }
+
                 } else {
                     toast.error("OCR failed", {
                         description: "Could not extract text from the uploaded file.",
@@ -169,14 +192,7 @@ export default function UploadReportPage() {
                             </div>
                         )}
 
-                        {ocrResult && (
-                            <div className="space-y-2 rounded-md bg-blue-50 p-3">
-                                <p className="text-sm font-medium text-blue-800">Extracted Text (OCR):</p>
-                                <pre className="whitespace-pre-wrap text-xs text-blue-700">
-                                    <Markdown>{ocrResult}</Markdown>
-                                </pre>
-                            </div>
-                        )}
+
                     </CardContent>
                     <CardFooter>
                         <Button
@@ -187,6 +203,29 @@ export default function UploadReportPage() {
                             {uploading ? "Uploading..." : "Upload Report"}
                         </Button>
                     </CardFooter>
+                    {summary && (
+                        <div className="space-y-4 p-4">
+                            <div className="space-y-2 rounded-md bg-yellow-50 p-3">
+                                <p className="text-sm font-medium text-yellow-800">Summary:</p>
+                                <pre className="whitespace-pre-wrap text-xs text-yellow-700">
+                                    <Markdown>{summary}</Markdown>
+                                </pre>
+                            </div>
+                            {!showChat && (
+                                <Button
+                                    onClick={() => setShowChat(true)}
+                                    className="w-full bg-indigo-600 hover:bg-indigo-700"
+                                >
+                                    Have a chat with report
+                                </Button>
+                            )}
+                        </div>
+                    )}
+                    {showChat && summary && ocrResult  && (
+                        <div className="p-4">
+                            <ChatWithAI summary={summary} ocr={ocrResult} />
+                        </div>
+                    )}
                 </Card>
             </div>
         </ScrollArea>
