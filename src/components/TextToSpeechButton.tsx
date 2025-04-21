@@ -1,17 +1,20 @@
+"use client";
 import React from 'react'
 import { useSpeechSynthesis } from 'react-speech-kit'
 import { Button } from './ui/button'
 
 interface TextToSpeechButtonProps {
     text: string;
+    lang?: string;
 }
 
-const TextToSpeechButton = ({ text }: TextToSpeechButtonProps) => {
-    const { speak, cancel, speaking, supported } = useSpeechSynthesis();
+const TextToSpeechButton = ({ text, lang }: TextToSpeechButtonProps) => {
+    const { speak, cancel, speaking, supported, voices } = useSpeechSynthesis();
 
     const handleSpeak = () => {
         if (supported) {
-            speak({ text });
+            const voice = voices.find((v) => v.lang.startsWith(lang || 'en'));
+            speak({ text, voice });
         } else {
             alert('Sorry, your browser does not support text to speech.');
         }
