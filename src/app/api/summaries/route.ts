@@ -16,6 +16,7 @@ You are a medical document assistant. Summarize the following medical report con
 - Presenting complaint
 - Sources of information
 - Any clear diagnostic, procedural or treatment notes
+- Summarization & Highlighting: Provide concise summaries of complex reports. Highlight key findings, abnormalities, or values outside normal ranges.
 
 📄 Use this strict format:
 
@@ -46,6 +47,7 @@ Now, here is the report content:
 
 "${text}"
 `;
+
 
 export async function POST(req: NextRequest) {
     try {
