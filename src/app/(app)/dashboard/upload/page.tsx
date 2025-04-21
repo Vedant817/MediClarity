@@ -8,7 +8,8 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Markdown from 'react-markdown'
-import ChatWithAI from "@/components/ChatWithAi";
+import ChatWithAI from "@/components/ChatWithAI";
+import TextToSpeechButton from "@/components/TextToSpeechButton";
 
 export default function UploadReportPage() {
     const [file, setFile] = useState<File | null>(null);
@@ -212,16 +213,21 @@ export default function UploadReportPage() {
                                 </pre>
                             </div>
                             {!showChat && (
-                                <Button
-                                    onClick={() => setShowChat(true)}
-                                    className="w-full bg-indigo-600 hover:bg-indigo-700"
-                                >
-                                    Have a chat with report
-                                </Button>
+                                <div className="flex gap-2 w-full">
+                                    <Button
+                                        onClick={() => setShowChat(true)}
+                                        className="w-[50%] bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
+                                    >
+                                        Have a chat with report
+                                    </Button>
+                                    <div className="w-full">
+                                        <TextToSpeechButton text={summary} />
+                                    </div>
+                                </div>
                             )}
                         </div>
                     )}
-                    {showChat && summary && ocrResult  && (
+                    {showChat && summary && ocrResult && (
                         <div className="p-4">
                             <ChatWithAI summary={summary} ocr={ocrResult} />
                         </div>
