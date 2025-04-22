@@ -1,5 +1,5 @@
 "use client"
-import { useState, ChangeEvent } from "react";
+import { useState, ChangeEvent, useEffect } from "react";
 import { Upload, File, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,16 +10,44 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import Markdown from 'react-markdown'
 import ChatWithAI from "@/components/ChatWithAI";
 import TextToSpeechButton from "@/components/TextToSpeechButton";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+    SelectGroup,
+    SelectLabel,
+} from "@/components/ui/select"
+
+const languageOptions = [
+    { code: 'en', label: 'English' },
+    { code: 'hi', label: 'Hindi' },
+    { code: 'pa', label: 'Punjabi' },
+    { code: 'es', label: 'Spanish' },
+    { code: 'fr', label: 'French' },
+];
 
 export default function UploadReportPage() {
     const [file, setFile] = useState<File | null>(null);
     const [fileUrl, setFileUrl] = useState("");
+    const [statusMessage, setStatusMessage] = useState('');
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadStatus, setUploadStatus] = useState<string | null>(null);
     const [ocrResult, setOcrResult] = useState<string | null>(null);
     const [summary, setSummary] = useState<string | null>(null);
     const [showChat, setShowChat] = useState(false);
+    const [selectedLang, setSelectedLang] = useState('en');
+    const [translatedSummary, setTranslatedSummary] = useState('');
+
+    useEffect(() => {
+        if (summary && selectedLang === 'en') {
+            setTranslatedSummary(summary);
+        } else if (summary && selectedLang !== 'en') {
+            handleLanguageChange(selectedLang);
+        }
+    }, [summary]);
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) return;
@@ -60,6 +88,7 @@ export default function UploadReportPage() {
             const formData = new FormData();
             formData.append("file", file);
 
+            setStatusMessage("Uploading...");
             const response = await fetch("/api/upload", {
                 method: "POST",
                 body: formData,
@@ -82,6 +111,7 @@ export default function UploadReportPage() {
                     description: "Your report has been uploaded successfully.",
                 });
 
+                setStatusMessage("Extracting text from document...");
                 const ocrResponse = await fetch("/api/ocr", {
                     method: "POST",
                     headers: {
@@ -100,6 +130,7 @@ export default function UploadReportPage() {
                         description: "Text has been successfully extracted from the document.",
                     });
 
+                    setStatusMessage("Summarizing extracted text...");
                     const summaryResponse = await fetch("/api/summaries", {
                         method: "POST",
                         headers: {
@@ -138,7 +169,31 @@ export default function UploadReportPage() {
                 description: "There was an error uploading your report. Please try again.",
             });
         } finally {
+            setStatusMessage("");
             setUploading(false);
+            setFile(null);
+        }
+    };
+
+    const handleLanguageChange = async (value: string) => {
+        const lang = value;
+        setSelectedLang(lang);
+
+        if (summary) {
+            try {
+                const response = await fetch('/api/translate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: summary, targetLang: lang }),
+                });
+
+                const data = await response.json();
+                setTranslatedSummary(data.translatedText);
+            } catch (error) {
+                console.error('Translation error:', error);
+            }
         }
     };
 
@@ -179,21 +234,17 @@ export default function UploadReportPage() {
                                 {uploadStatus === "error" && <AlertCircle className="h-5 w-5 text-red-500" />}
                             </div>
                         )}
-
                         {uploading && (
                             <div className="space-y-2">
                                 <Progress value={uploadProgress} className="h-2 w-full" />
-                                <p className="text-xs text-gray-500">Uploading... {uploadProgress}%</p>
+                                <p className="text-xs text-gray-500">{statusMessage}</p>
                             </div>
                         )}
-
                         {fileUrl && (
                             <div className="space-y-2 rounded-md bg-green-50 p-3">
                                 <p className="text-sm font-medium text-green-800">Upload successful!</p>
                             </div>
                         )}
-
-
                     </CardContent>
                     <CardFooter>
                         <Button
@@ -209,7 +260,7 @@ export default function UploadReportPage() {
                             <div className="space-y-2 rounded-md bg-yellow-50 p-3">
                                 <p className="text-sm font-medium text-yellow-800">Summary:</p>
                                 <pre className="whitespace-pre-wrap text-xs text-yellow-700">
-                                    <Markdown>{summary}</Markdown>
+                                    <Markdown>{translatedSummary || summary}</Markdown>
                                 </pre>
                             </div>
                             {!showChat && (
@@ -221,7 +272,24 @@ export default function UploadReportPage() {
                                         Have a chat with report
                                     </Button>
                                     <div className="w-full">
-                                        <TextToSpeechButton text={summary} />
+                                        <TextToSpeechButton text={translatedSummary || summary} lang={selectedLang} />
+                                    </div>
+                                    <div className="flex w-full items-center gap-2">
+                                        <Select value={selectedLang} onValueChange={handleLanguageChange} >
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Select a language" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectGroup className="w-full items-center justify-center">
+                                                    <SelectLabel>Languages</SelectLabel>
+                                                    {languageOptions.map((lang) => (
+                                                        <SelectItem key={lang.code} value={lang.code}>
+                                                            {lang.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectGroup>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 </div>
                             )}
