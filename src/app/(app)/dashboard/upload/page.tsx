@@ -31,6 +31,7 @@ const languageOptions = [
 export default function UploadReportPage() {
     const [file, setFile] = useState<File | null>(null);
     const [fileUrl, setFileUrl] = useState("");
+    const [statusMessage, setStatusMessage] = useState('');
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadStatus, setUploadStatus] = useState<string | null>(null);
@@ -87,6 +88,7 @@ export default function UploadReportPage() {
             const formData = new FormData();
             formData.append("file", file);
 
+            setStatusMessage("Uploading...");
             const response = await fetch("/api/upload", {
                 method: "POST",
                 body: formData,
@@ -109,6 +111,7 @@ export default function UploadReportPage() {
                     description: "Your report has been uploaded successfully.",
                 });
 
+                setStatusMessage("Extracting text from document...");
                 const ocrResponse = await fetch("/api/ocr", {
                     method: "POST",
                     headers: {
@@ -127,6 +130,7 @@ export default function UploadReportPage() {
                         description: "Text has been successfully extracted from the document.",
                     });
 
+                    setStatusMessage("Summarizing extracted text...");
                     const summaryResponse = await fetch("/api/summaries", {
                         method: "POST",
                         headers: {
@@ -165,7 +169,9 @@ export default function UploadReportPage() {
                 description: "There was an error uploading your report. Please try again.",
             });
         } finally {
+            setStatusMessage("");
             setUploading(false);
+            setFile(null);
         }
     };
 
@@ -228,21 +234,17 @@ export default function UploadReportPage() {
                                 {uploadStatus === "error" && <AlertCircle className="h-5 w-5 text-red-500" />}
                             </div>
                         )}
-
                         {uploading && (
                             <div className="space-y-2">
                                 <Progress value={uploadProgress} className="h-2 w-full" />
-                                <p className="text-xs text-gray-500">Uploading... {uploadProgress}%</p>
+                                <p className="text-xs text-gray-500">{statusMessage}</p>
                             </div>
                         )}
-
                         {fileUrl && (
                             <div className="space-y-2 rounded-md bg-green-50 p-3">
                                 <p className="text-sm font-medium text-green-800">Upload successful!</p>
                             </div>
                         )}
-
-
                     </CardContent>
                     <CardFooter>
                         <Button
