@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runOcrFromImageUrl, runOcrFromPdfUrl } from '@/lib/ocr';
 
+interface OCRPage {
+    index: number;
+    markdown: string;
+}
+
 export async function POST(request: NextRequest) {
     try {
         const { documentUrl } = await request.json();
@@ -18,7 +23,7 @@ export async function POST(request: NextRequest) {
             result = await runOcrFromImageUrl(documentUrl);
         }
 
-        const extractedText = result?.pages?.map((page: any) => {
+        const extractedText = result?.pages?.map((page: OCRPage) => {
             return {
                 pageIndex: page.index,
                 text: page.markdown,
