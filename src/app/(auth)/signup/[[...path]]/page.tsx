@@ -11,7 +11,7 @@ const Register = () => {
     if (isSignedIn && isLoaded) {
       router.replace('/dashboard');
     }
-  }, [isSignedIn, isLoaded, user]);
+  }, [isSignedIn, isLoaded, user, router]);
 
   if (!isLoaded) {
     return <div className='flex flex-col items-center justify-center h-screen'>Loading...</div>

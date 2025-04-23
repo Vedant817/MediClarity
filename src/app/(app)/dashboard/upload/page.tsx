@@ -1,5 +1,5 @@
 "use client"
-import { useState, ChangeEvent, useEffect } from "react";
+import { useState, ChangeEvent, useEffect, useCallback } from "react";
 import { Upload, File, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,14 +40,6 @@ export default function UploadReportPage() {
     const [showChat, setShowChat] = useState(false);
     const [selectedLang, setSelectedLang] = useState('en');
     const [translatedSummary, setTranslatedSummary] = useState('');
-
-    useEffect(() => {
-        if (summary && selectedLang === 'en') {
-            setTranslatedSummary(summary);
-        } else if (summary && selectedLang !== 'en') {
-            handleLanguageChange(selectedLang);
-        }
-    }, [summary]);
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) return;
@@ -146,18 +138,22 @@ export default function UploadReportPage() {
                         toast.success("Summary generated successfully", {
                             description: "The summary has been generated from the extracted text.",
                         });
+
+                        await fetch('/api/reports/save', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ fileUrl: data.imgUrl, summary: summaryData.summary }),
+                        });
                     } else {
                         toast.error("Summary failed", {
                             description: "Could not generate summary from extracted text.",
                         });
                     }
-
                 } else {
                     toast.error("OCR failed", {
                         description: "Could not extract text from the uploaded file.",
                     });
                 }
-
             } else {
                 throw new Error("Upload failed");
             }
@@ -175,7 +171,7 @@ export default function UploadReportPage() {
         }
     };
 
-    const handleLanguageChange = async (value: string) => {
+    const handleLanguageChange = useCallback(async (value: string) => {
         const lang = value;
         setSelectedLang(lang);
 
@@ -195,7 +191,15 @@ export default function UploadReportPage() {
                 console.error('Translation error:', error);
             }
         }
-    };
+    }, [summary]);
+
+    useEffect(() => {
+        if (summary && selectedLang === 'en') {
+            setTranslatedSummary(summary);
+        } else if (summary && selectedLang !== 'en') {
+            handleLanguageChange(selectedLang);
+        }
+    }, [summary, selectedLang, handleLanguageChange]);
 
     return (
         <ScrollArea className="h-screen w-full overflow-hidden">
@@ -252,7 +256,7 @@ export default function UploadReportPage() {
                             disabled={!file || uploading}
                             className="w-full bg-teal-600 hover:bg-teal-700"
                         >
-                            {uploading ? "Uploading..." : "Upload Report"}
+                            {uploading ? statusMessage : "Upload Report"}
                         </Button>
                     </CardFooter>
                     {summary && (
