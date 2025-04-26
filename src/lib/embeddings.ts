@@ -4,7 +4,7 @@ import { PineconeStore } from "@langchain/pinecone";
 import { getPineconeIndex } from "./vector";
 
 const embeddingModel = new GoogleGenerativeAIEmbeddings({
-    model: "embedding-001",
+    model: "gemini-embedding-exp-03-07",
     apiKey: process.env.GEMINI_API_KEY!,
 });
 
