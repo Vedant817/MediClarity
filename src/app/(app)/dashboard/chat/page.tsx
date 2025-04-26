@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,35 +23,73 @@ const AIChatPage = () => {
     const [summary, setSummary] = useState<string>("");
     const [ocr, setOcr] = useState<string>("");
     const [isLoadingData, setIsLoadingData] = useState(true);
+    const [isSessionInitialized, setIsSessionInitialized] = useState(false);
+
     const sessionIdRef = useRef<string>("");
     const bottomRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        sessionIdRef.current = uuidv4();
-        fetchSummaryAndOcr();
+    const initializeSession = useCallback(async () => {
+        if (!user || isSessionInitialized) return;
 
-        return () => {
-            endSession();
-        };
-    }, []);
+        setIsThinking(true);
+        try {
+            const res = await fetch("/api/chatbot/initialize-session", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    sessionId: sessionIdRef.current,
+                    userId: user.id,
+                    summary,
+                    ocr,
+                }),
+            });
 
-    const fetchSummaryAndOcr = async () => {
+            if (!res.ok) throw new Error("Failed to initialize session");
+            setIsSessionInitialized(true);
+        } catch (error) {
+            console.error("Session initialization error:", error);
+        } finally {
+            setIsThinking(false);
+        }
+    }, [user, isSessionInitialized, summary, ocr]);
+
+    const fetchSummaryAndOcr = useCallback(async () => {
         if (!user) return;
 
         try {
-            const res = await fetch(`/api/user-data?userId=${user.id}`);
-            const data = await res.json();
-            setSummary(data.summary || "");
-            setOcr(data.ocr || "");
+            const res = await fetch(`/api/chatbot/user-data?userId=${user.id}`);
+            if (!res.ok) {
+                if (res.status !== 404) console.error("Error fetching user data:", res.statusText);
+                setSummary("");
+                setOcr("");
+            } else {
+                const data = await res.json();
+                setSummary(data.summary || "");
+                setOcr(data.ocr || "");
+            }
         } catch (error) {
-            console.error("Failed to fetch summary and OCR:", error);
+            console.error("Fetch summary/OCR failed:", error);
+            setSummary("");
+            setOcr("");
         } finally {
             setIsLoadingData(false);
+            initializeSession();
         }
-    };
+    }, [user, initializeSession]);
+
+    useEffect(() => {
+        if (user) {
+            sessionIdRef.current = uuidv4();
+            fetchSummaryAndOcr();
+        }
+
+        return () => {
+            if (sessionIdRef.current) endSession();
+        };
+    }, [user, fetchSummaryAndOcr]);
 
     const sendMessage = async () => {
-        if (!input.trim() || !user || isLoadingData) return;
+        if (!input.trim() || !user || isLoadingData || !isSessionInitialized) return;
 
         const userMessage: Message = { role: "user", content: input };
         const updatedMessages = [...messages, userMessage];
@@ -59,24 +98,20 @@ const AIChatPage = () => {
         setIsThinking(true);
 
         try {
-            const res = await fetch("/api/chatbot", {
+            const res = await fetch("/api/chatbot/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     sessionId: sessionIdRef.current,
                     userId: user.id,
-                    summary,
-                    ocr,
-                    messages: updatedMessages,
+                    userMessage: input,
                 }),
             });
 
-            const data = await res.json();
-            const assistantMessage: Message = {
-                role: "assistant",
-                content: data.reply,
-            };
+            if (!res.ok) throw new Error("Chat request failed");
 
+            const data = await res.json();
+            const assistantMessage: Message = { role: "assistant", content: data.reply };
             setMessages((prev) => [...prev, assistantMessage]);
         } catch (error) {
             console.error("Chat error:", error);
@@ -98,17 +133,13 @@ const AIChatPage = () => {
 
     const endSession = async () => {
         if (!sessionIdRef.current) return;
-
         try {
-            await fetch("/api/chatbot", {
+            await fetch("/api/chatbot/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    sessionId: sessionIdRef.current,
-                    endSession: true,
-                }),
+                body: JSON.stringify({ sessionId: sessionIdRef.current, endSession: true }),
             });
-            console.log("Session ended and memory cleared ✅");
+            console.log("Session ended successfully ✅");
         } catch (error) {
             console.error("Failed to end session:", error);
         }
@@ -120,9 +151,9 @@ const AIChatPage = () => {
 
     if (isLoadingData) {
         return (
-            <div className="flex items-center justify-center h-screen">
+            <div className="flex items-center justify-center h-screen w-full">
                 <LoaderCircle className="w-8 h-8 animate-spin text-teal-600" />
-                <span className="ml-2 text-teal-800">Loading your data...</span>
+                <span className="ml-2">Loading your data...</span>
             </div>
         );
     }
@@ -133,6 +164,18 @@ const AIChatPage = () => {
                 <ScrollArea className="h-full w-full">
                     <div className="container mx-auto px-4 py-6 space-y-4">
                         <h1 className="text-2xl font-bold mb-4">💬 AI Medical Assistant</h1>
+
+                        {messages.length === 0 && (
+                            <div className="text-center text-gray-500 py-8">
+                                <p>Ask me anything about your medical report.</p>
+                                {!isSessionInitialized && (
+                                    <div className="mt-2 flex items-center justify-center gap-2">
+                                        <LoaderCircle className="w-4 h-4 animate-spin" />
+                                        <span className="text-sm">Preparing your medical context...</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {messages.map((msg, index) => (
                             <div
@@ -168,9 +211,13 @@ const AIChatPage = () => {
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
                         className="flex-grow"
-                        disabled={isThinking}
+                        disabled={isThinking || !isSessionInitialized}
                     />
-                    <Button onClick={sendMessage} disabled={isThinking || !input.trim()} className="bg-teal-700">
+                    <Button
+                        onClick={sendMessage}
+                        disabled={isThinking || !input.trim() || !isSessionInitialized}
+                        className="bg-teal-700"
+                    >
                         {isThinking ? (
                             <LoaderCircle className="w-4 h-4 animate-spin" />
                         ) : (

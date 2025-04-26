@@ -3,6 +3,8 @@ import connectDB from "@/lib/db";
 import Report from "@/models/report";
 
 export async function GET(req: NextRequest) {
+    await connectDB();
+
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
 
@@ -11,9 +13,6 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        await connectDB();
-
-        // Find the latest report for the user (if multiple)
         const report = await Report.findOne({ userId }).sort({ createdAt: -1 });
 
         if (!report) {
@@ -22,7 +21,7 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({
             summary: report.summary,
-            ocr: "", // Since your Report model does not have OCR field yet
+            ocr: report.ocr,
         });
     } catch (error) {
         console.error("Error fetching user report:", error);

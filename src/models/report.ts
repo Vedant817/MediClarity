@@ -4,6 +4,7 @@ const ReportSchema = new mongoose.Schema({
   userId: { type: String, required: true },
   fileUrl: { type: String, required: true },
   summary: { type: String, required: true },
+  ocr: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
 });
 
