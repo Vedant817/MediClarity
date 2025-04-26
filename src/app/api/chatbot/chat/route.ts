@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { similaritySearch, deleteNamespace } from "@/lib/embeddings";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
 
-const chatSessions: Record<string, any> = {};
+const chatSessions: Record<string, ChatSession> = {};
 
 export async function POST(req: Request) {
     try {
@@ -68,6 +68,7 @@ Explain medical terms in simple language and be specific to their personal medic
         let similarDocs = [];
         try {
             similarDocs = await similaritySearch(userMessage, sessionId, 5);
+            console.log(similarDocs);
         } catch (searchError) {
             console.error("Error searching for similar documents:", searchError);
             return NextResponse.json(

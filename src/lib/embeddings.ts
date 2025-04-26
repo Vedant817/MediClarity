@@ -4,10 +4,16 @@ import { PineconeStore } from "@langchain/pinecone";
 import { getPineconeIndex } from "./vector";
 
 const embeddingModel = new GoogleGenerativeAIEmbeddings({
+    model: "embedding-001",
     apiKey: process.env.GEMINI_API_KEY!,
 });
 
-export async function embedDocuments(chunks: { text: string; metadata: any }[], namespace: string) {
+interface ChunkMetaData {
+    userId: string;
+    [key: string]: unknown;
+}
+
+export async function embedDocuments(chunks: { text: string; metadata: ChunkMetaData }[], namespace: string) {
     if (chunks.length === 0) {
         console.log("No chunks to embed");
         return;

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
 import { embedDocuments } from "@/lib/embeddings";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const chatSessions: Record<string, any> = {};
+const chatSessions: Record<string, ChatSession> = {};
 
 export async function POST(req: Request) {
     try {
