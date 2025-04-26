@@ -4,22 +4,21 @@ import Report from "@/models/report";
 import { auth } from '@clerk/nextjs/server'
 
 export async function POST(req: Request) {
-
-    const { userId } = await auth()
+    const { userId } = await auth();
 
     if (!userId) {
-        return new NextResponse('Unauthorized', { status: 401 })
+        return new NextResponse('Unauthorized', { status: 401 });
     }
     await connectDB();
 
     try {
-        const { fileUrl, summary } = await req.json();
+        const { fileUrl, summary, ocr } = await req.json();
 
-        if (!userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        if (!fileUrl || !summary || !ocr) {
+            return NextResponse.json({ error: "Missing fields" }, { status: 400 });
         }
 
-        const report = await Report.create({ userId, fileUrl, summary });
+        const report = await Report.create({ userId, fileUrl, summary, ocr });
         return NextResponse.json({ message: "Report saved", report });
     } catch (err) {
         console.error(err);

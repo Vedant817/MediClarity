@@ -142,7 +142,7 @@ export default function UploadReportPage() {
                         await fetch('/api/reports/save', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ fileUrl: data.imgUrl, summary: summaryData.summary }),
+                            body: JSON.stringify({ fileUrl: data.imgUrl, summary: summaryData.summary, ocr: fullText }),
                         });
                     } else {
                         toast.error("Summary failed", {
