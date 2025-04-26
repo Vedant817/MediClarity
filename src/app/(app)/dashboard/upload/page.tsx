@@ -115,7 +115,7 @@ export default function UploadReportPage() {
                 const ocrData = await ocrResponse.json();
 
                 if (ocrData && ocrData.extractedText) {
-                    const fullText = ocrData.extractedText.map((page) => page.text).join("\n\n");
+                    const fullText = ocrData.extractedText.map((page: {text: string}) => page.text).join("\n\n");
                     setOcrResult(fullText);
 
                     toast.success("OCR extraction successful", {
