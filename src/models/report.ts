@@ -21,7 +21,5 @@ const ReportSchema = new Schema<IReport>(
   { timestamps: true }
 );
 
-// Use existing model if it exists or create a new one
 const Report = mongoose.models.Report || mongoose.model<IReport>('Report', ReportSchema);
-
 export default Report;
