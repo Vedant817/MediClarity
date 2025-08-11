@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const { text, targetLang } = body;
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
         const result = await model.generateContent(translationPrompt(text, targetLang));
         const response = result.response;
         const translatedText = response.text();

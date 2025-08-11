@@ -32,7 +32,7 @@ const testimonial = [
   },
   {
     quote:
-      "As someone with no medical background, understanding my test results was always challenging. MedInsight AI makes it simple and clear.",
+      "As someone with no medical background, understanding my test results was always challenging. MediClarity makes it simple and clear.",
     name: "Michael Chen",
     title: "Patient",
   },
@@ -177,7 +177,7 @@ export default function Home() {
         <div className="container flex h-16 items-center justify-between px-4 md:px-6">
           <div className="flex items-center gap-2">
             <Brain className="h-6 w-6 text-teal-600" />
-            <span className="text-xl font-bold">MedInsight AI</span>
+            <span className="text-xl font-bold">MediClarity</span>
           </div>
           <nav className="hidden md:flex gap-6">
             <Link href="#features" className="text-sm font-medium hover:underline underline-offset-4">
@@ -481,7 +481,7 @@ export default function Home() {
                 Ready to Understand Your Medical Reports?
               </h2>
               <p className="max-w-[900px] text-teal-100 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
-                Join thousands of users who are taking control of their health with MedInsight AI.
+                Join thousands of users who are taking control of their health with MediClarity.
               </p>
             </div>
             <div className="flex flex-col gap-2 min-[400px]:flex-row">
@@ -503,7 +503,7 @@ export default function Home() {
             <div className="flex flex-col col-span-2 gap-2 lg:col-span-2">
               <div className="flex items-center gap-2">
                 <Brain className="h-6 w-6 text-teal-600" />
-                <span className="text-xl font-bold">MedInsight AI</span>
+                <span className="text-xl font-bold">MediClarity</span>
               </div>
               <p className="text-sm text-gray-500">
                 Transforming complex medical reports into clear, actionable insights with advanced AI technology.
@@ -548,7 +548,7 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-10 border-t pt-6 flex flex-col md:flex-row justify-between items-center">
-            <p className="text-sm text-gray-500">© {new Date().getFullYear()} MedInsight AI. All rights reserved.</p>
+            <p className="text-sm text-gray-500">© {new Date().getFullYear()} MediClarity. All rights reserved.</p>
             <p className="text-sm text-gray-500 mt-2 md:mt-0">HIPAA Compliant | SOC 2 Certified | ISO 27001</p>
           </div>
         </div>
