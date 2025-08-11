@@ -108,13 +108,14 @@ export default function ReportsPage() {
                                 href={selectedReport.fileUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline"
+                                className="text-teal-600 hover:underline font-bold text-lg"
                             >
-                                View Full Report
+                                View Full Report Here
                             </a>
                             <div className="max-h-[500px] overflow-y-auto prose prose-sm sm:prose-base text-gray-800">
                                 <Markdown>{selectedReport.summary}</Markdown>
                             </div>
+                            <div className="text-red-600 font-semibold">This is only for reference, recommended to visit a doctor for proper diagnosis and treatment.</div>
                         </div>
                     )}
                 </DialogContent>
