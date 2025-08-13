@@ -1,22 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use server';
 import { z } from 'zod';
 import connectDB from '@/lib/db';
 import { revalidatePath } from 'next/cache';
-import mongoose from 'mongoose';
-
-const AppointmentSchema = new mongoose.Schema({
-    patientId: { type: String, required: true },
-    providerId: { type: String, required: true },
-    date: { type: String, required: true },
-    time: { type: String, required: true },
-    reason: { type: String, required: true },
-    preVisitRequirements: { type: [String], default: [] },
-    status: { type: String, default: 'scheduled' },
-    createdAt: { type: Date, default: Date.now }
-});
-
-const Appointment = mongoose.models.Appointment ||
-    mongoose.model('Appointment', AppointmentSchema);
+import Appointment from '@/models/appointment';
 
 const appointmentSchema = z.object({
     patientId: z.string(),
@@ -45,6 +32,17 @@ export async function createAppointment(prevState: any, formData: FormData) {
 
         const validatedData = appointmentSchema.parse(dataToValidate);
 
+        const existingAppointment = await Appointment.findOne({
+            providerId: validatedData.providerId,
+            date: validatedData.date,
+            time: validatedData.time,
+            status: 'scheduled'
+        });
+
+        if (existingAppointment) {
+            return { error: 'This time slot is no longer available. Please select another.' };
+        }
+
         const newAppointment = new Appointment({
             ...validatedData,
             status: 'scheduled',
@@ -56,6 +54,29 @@ export async function createAppointment(prevState: any, formData: FormData) {
         return { success: true };
     } catch (error) {
         console.error('Appointment creation error:', error);
+        if (error instanceof z.ZodError) {
+            return { error: error.errors.map(e => e.message).join(', ') };
+        }
         return { error: 'Failed to create appointment' };
+    }
+}
+
+export async function cancelAppointment(appointmentId: string) {
+    try {
+        await connectDB();
+
+        const appointment = await Appointment.findById(appointmentId);
+        if (!appointment) {
+            return { error: 'Appointment not found' };
+        }
+
+        appointment.status = 'cancelled';
+        await appointment.save();
+
+        revalidatePath('/appointments');
+        return { success: true };
+    } catch (error) {
+        console.error('Cancellation error:', error);
+        return { error: 'Failed to cancel appointment' };
     }
 }

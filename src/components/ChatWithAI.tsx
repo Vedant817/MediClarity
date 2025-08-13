@@ -59,7 +59,7 @@ export default function ChatWithAI({ summary, ocr }: Props) {
             <div className="h-64 overflow-y-auto space-y-3 p-2 bg-gray-50 border rounded">
                 {chatHistory.map((msg, idx) => (
                     <div key={idx} className={`text-sm ${msg.role === "user" ? "text-right" : "text-left"}`}>
-                        <div className={`inline-block p-2 rounded ${msg.role === "user" ? "bg-blue-200" : "bg-gray-200"}`}>
+                        <div className={`inline-block p-2 rounded ${msg.role === "user" ? "bg-green-200" : "bg-gray-200"}`}>
                             <Markdown>{msg.content}</Markdown>
                         </div>
                     </div>
@@ -72,7 +72,7 @@ export default function ChatWithAI({ summary, ocr }: Props) {
                     onKeyDown={handleKeyDown}
                     placeholder="Ask a question about your summary..."
                 />
-                <Button onClick={sendMessage} disabled={loading || !input.trim()} className="bg-blue-600 hover:bg-blue-700">
+                <Button onClick={sendMessage} disabled={loading || !input.trim()} className="bg-green-600 hover:bg-green-700">
                     {loading ? "Sending..." : "Send"}
                 </Button>
             </div>

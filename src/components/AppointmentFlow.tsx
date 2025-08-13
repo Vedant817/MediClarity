@@ -1,30 +1,43 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { createAppointment } from '@/actions/appointment';
+import { useUser } from '@clerk/nextjs';
+import { useEffect } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { toast } from 'sonner';
-import { appointmentTypes, timeSlots, providers } from '@/lib/data';
+import { appointmentTypes, timeSlots } from '@/lib/data';
+import { createAppointment } from '@/actions/appointment';
+import { useAppointmentStore } from '@/store/appointment';
 
-export default function EnhancedAppointmentFlow() {
-    const [activeStep, setActiveStep] = useState(0);
+type Provider = {
+    id: string;
+    name: string;
+    specialty: string;
+};
+
+export default function EnhancedAppointmentFlow({ providers }: { providers: Provider[] }) {
+    const { user } = useUser();
     const [state, formAction] = useFormState(createAppointment, null);
-    const [selectedType, setSelectedType] = useState('');
-    const [selectedDate, setSelectedDate] = useState('');
-    const [selectedTime, setSelectedTime] = useState('');
-    const [selectedProvider, setSelectedProvider] = useState('');
+    const {
+        activeStep,
+        selectedType,
+        selectedDate,
+        selectedTime,
+        selectedProvider,
+        setActiveStep,
+        setSelectedType,
+        setSelectedDate,
+        setSelectedTime,
+        setSelectedProvider,
+        reset,
+    } = useAppointmentStore();
 
     useEffect(() => {
         if (state?.success) {
             toast.success('Appointment scheduled successfully!');
-            setSelectedType('');
-            setSelectedDate('');
-            setSelectedTime('');
-            setSelectedProvider('');
-            setActiveStep(0);
+            reset();
         } else if (state?.error) {
             toast.error(state.error);
         }
-    }, [state]);
+    }, [state, reset]);
 
     const steps = [
         {
@@ -75,13 +88,13 @@ export default function EnhancedAppointmentFlow() {
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium mb-1">Provider</label>
+                        <label className="block text-sm font-medium mb-1">Physician</label>
                         <select
                             className="w-full border rounded p-2"
                             value={selectedProvider}
                             onChange={(e) => setSelectedProvider(e.target.value)}
                         >
-                            <option value="">Select a provider</option>
+                            <option value="">Select a physician</option>
                             {providers.map(provider => (
                                 <option key={provider.id} value={provider.id}>
                                     {provider.name} - {provider.specialty}
@@ -95,42 +108,36 @@ export default function EnhancedAppointmentFlow() {
         {
             title: 'Confirm',
             content: (
-                <form action={formAction}>
-                    <input type="hidden" name="appointmentType" value={selectedType} />
-                    <input type="hidden" name="patientId" value="patient-123" />
-                    <input type="hidden" name="providerId" value={selectedProvider} />
-                    <input type="hidden" name="date" value={selectedDate} />
-                    <input type="hidden" name="time" value={selectedTime} />
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Reason for visit</label>
-                            <textarea
-                                name="reason"
-                                className="w-full border rounded p-2"
-                                required
-                                rows={4}
-                            />
-                        </div>
-                        <div>
-                            <p className="font-medium mb-2">Pre-visit requirements:</p>
-                            <div className="space-y-2">
-                                <div>
-                                    <input type="checkbox" id="req-fasting" name="preVisitRequirements" value="fasting" className="mr-2" />
-                                    <label htmlFor="req-fasting">Fasting (8 hours)</label>
-                                </div>
-                                <div>
-                                    <input type="checkbox" id="req-water" name="preVisitRequirements" value="water" className="mr-2" />
-                                    <label htmlFor="req-water">Drink plenty of water</label>
-                                </div>
-                                <div>
-                                    <input type="checkbox" id="req-meds" name="preVisitRequirements" value="meds" className="mr-2" />
-                                    <label htmlFor="req-meds">Bring current medications</label>
-                                </div>
+                <div>
+                    <form action={formAction}>
+                        <input type="hidden" name="appointmentType" value={selectedType} />
+                        <input type="hidden" name="patientId" value={user?.id} />
+                        <input type="hidden" name="providerId" value={selectedProvider} />
+                        <input type="hidden" name="date" value={selectedDate} />
+                        <input type="hidden" name="time" value={selectedTime} />
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Reason for visit</label>
+                                <textarea
+                                    name="reason"
+                                    className="w-full border rounded p-2"
+                                    required
+                                    rows={4}
+                                />
                             </div>
+                            <div>
+                                <p className="font-medium mb-2">Pre-visit requirements:</p>
+                                <ul className="list-disc list-inside space-y-2">
+                                    <li>Fasting (8 hours)</li>
+                                    <li>Drink plenty of water</li>
+                                    <li>Bring current medications</li>
+                                </ul>
+                            </div>
+                            <SubmitButton />
                         </div>
-                        <SubmitButton />
-                    </div>
-                </form>
+                    </form>
+                    
+                </div>
             ),
         },
     ];
@@ -144,12 +151,16 @@ export default function EnhancedAppointmentFlow() {
             toast.error("Please select date, time and provider");
             return;
         }
-        setActiveStep((prev) => Math.min(prev + 1, steps.length - 1));
+        setActiveStep(Math.min(activeStep + 1, steps.length - 1));
     };
 
     const handleBack = () => {
-        setActiveStep((prev) => Math.max(prev - 1, 0));
+        setActiveStep(Math.max(activeStep - 1, 0));
     };
+
+    if (!user) {
+        return <div>Loading...</div>;
+    }
 
     return (
         <div className="max-w-3xl mx-auto">
@@ -179,7 +190,7 @@ export default function EnhancedAppointmentFlow() {
                         type="button"
                         onClick={handleBack}
                         disabled={activeStep === 0}
-                        className="px-4 py-2 border rounded text-gray-600 disabled:opacity-50"
+                        className="px-4 py-2 border rounded text-gray-600 disabled:opacity-50 cursor-pointer"
                     >
                         Back
                     </button>
@@ -188,7 +199,7 @@ export default function EnhancedAppointmentFlow() {
                         <button
                             type="button"
                             onClick={handleNext}
-                            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 cursor-pointer"
                         >
                             Next
                         </button>
@@ -207,7 +218,7 @@ function SubmitButton() {
             disabled={pending}
             className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
         >
-            {pending ? 'Scheduling...' : 'Confirm Appointment'}
+            {pending ? 'Scheduling...' : 'Schedule Appointment'}
         </button>
     );
 }
