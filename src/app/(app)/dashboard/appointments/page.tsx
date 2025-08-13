@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CheckCircle2 } from 'lucide-react';
 import HealthTimeline from '@/components/HealthTimeline';
 import AppointmentScheduler from '@/components/AppointmentScheduler';
-import ConversationalScheduler from '@/components/AppointmentSchedular';
+import ConversationalScheduler from '@/components/AISchedular';
 import { TimelineEvent } from '@/types';
 
 export default function AppointmentsPage({
