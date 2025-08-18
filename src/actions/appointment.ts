@@ -80,3 +80,14 @@ export async function cancelAppointment(appointmentId: string) {
         return { error: 'Failed to cancel appointment' };
     }
 }
+
+export async function getAppointments(patientId: string) {
+    try {
+        await connectDB();
+        const appointments = await Appointment.find({ patientId: patientId }).lean();
+        return JSON.parse(JSON.stringify(appointments));
+    } catch (error) {
+        console.error('Error fetching appointments:', error);
+        return [];
+    }
+}

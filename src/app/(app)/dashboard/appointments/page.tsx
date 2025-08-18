@@ -7,17 +7,8 @@ import { CheckCircle2 } from 'lucide-react';
 import HealthTimeline from '@/components/HealthTimeline';
 import AppointmentScheduler from '@/components/AppointmentScheduler';
 import ConversationalScheduler from '@/components/AISchedular';
-import { TimelineEvent } from '@/types';
 
-export default function AppointmentsPage({
-    medicalEvents,
-    medications,
-    appointments
-}: {
-    medicalEvents: Omit<TimelineEvent, 'type'>[];
-    medications: Omit<TimelineEvent, 'type'>[];
-    appointments: Omit<TimelineEvent, 'type'>[];
-}) {
+export default function AppointmentsPage() {
     const [activeTab, setActiveTab] = useState('timeline');
     const searchParams = useSearchParams();
     const showSuccess = searchParams.get('success') === 'true';
@@ -36,18 +27,14 @@ export default function AppointmentsPage({
                 </Alert>
             )}
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-8">
-                <TabsList className="grid grid-cols-3 mb-6 space-x-2">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
+                <TabsList className="grid grid-cols-3 mb-2 space-x-2">
                     <TabsTrigger className='cursor-pointer hover:bg-teal-100' value="timeline">Timeline</TabsTrigger>
                     <TabsTrigger className='cursor-pointer hover:bg-teal-100' value="schedule">Schedule</TabsTrigger>
                     <TabsTrigger className='cursor-pointer hover:bg-teal-100' value="ai-scheduler">AI Scheduler</TabsTrigger>
                 </TabsList>
                 <TabsContent value="timeline">
-                    <HealthTimeline
-                        medicalEvents={medicalEvents}
-                        medications={medications}
-                        appointments={appointments}
-                    />
+                    <HealthTimeline />
                 </TabsContent>
                 <TabsContent value="schedule">
                     <AppointmentScheduler />
