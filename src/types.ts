@@ -38,13 +38,21 @@ export interface AppointmentRequest {
 }
 
 export interface BookingData {
-  provider?: string;
-  providerId?: string;
-  date?: string;
-  time?: string;
-  reason?: string;
-  type?: string;
+        providerName?: string;
+    providerId?: string;
+    date?: string;
+    time?: string;
+    reason?: string;
+    type?: string;
 }
+
+export interface Doctor {
+    id: string;
+    name: string;
+    specialty: string;
+    justification: string;
+}
+
 
 export interface PatientProfile {
   age: number;
