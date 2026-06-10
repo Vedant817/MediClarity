@@ -1,17 +1,45 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { similaritySearch, deleteNamespace } from "@/lib/embeddings";
-import { GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { deleteNamespace } from "@/lib/embeddings";
 import { aiModelConfig } from "@/lib/ai/model-config";
-import { buildChatSystemPrompt, buildRetrievedContextPrompt } from "@/lib/ai/prompts";
 import { getUserVectorNamespace, isValidSessionId } from "@/lib/security/session";
+import { buildRagAnswerPrompt, retrieveRagContext, type ChatHistoryMessage } from "@/lib/rag";
 
-const chatSessions: Record<string, ChatSession> = {};
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+function normalizeUserMessage(value: unknown) {
+    if (typeof value !== "string") {
+        return "";
+    }
+
+    return value.trim().slice(0, aiModelConfig.maxChatMessageCharacters);
+}
+
+function normalizeHistory(value: unknown): ChatHistoryMessage[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .filter((message): message is ChatHistoryMessage => {
+            if (!message || typeof message !== "object") return false;
+            const candidate = message as Partial<ChatHistoryMessage>;
+            return (candidate.role === "user" || candidate.role === "assistant")
+                && typeof candidate.content === "string";
+        })
+        .slice(-8)
+        .map((message) => ({
+            role: message.role,
+            content: message.content.slice(0, aiModelConfig.maxChatMessageCharacters),
+        }));
+}
 
 export async function POST(req: Request) {
     try {
         const { userId } = await auth();
-        const { sessionId, userMessage, endSession } = await req.json();
+        const body = await req.json();
+        const { sessionId, endSession } = body;
 
         if (!isValidSessionId(sessionId) || !userId) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -21,79 +49,46 @@ export async function POST(req: Request) {
 
         if (endSession) {
             await deleteNamespace(namespace);
-            if (chatSessions[namespace]) {
-                delete chatSessions[namespace];
-            }
             return NextResponse.json({ status: "Session ended" });
         }
 
-        let chat = chatSessions[namespace];
-        if (!chat) {
-            try {
-                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-                const model = await genAI.getGenerativeModel({ model: aiModelConfig.chatModel });
-
-                const systemPrompt = buildChatSystemPrompt();
-
-                chat = await model.startChat({
-                    history: [
-                        { role: "user", parts: [{ text: "I need help understanding my medical reports" }] },
-                        { role: "model", parts: [{ text: "I'm your AI Medical Assistant. I have access to your medical information and can help you understand your reports. What would you like to know about your medical data?" }] }
-                    ],
-                    generationConfig: {
-                        temperature: 0.2,
-                        topP: 0.8,
-                        topK: 40,
-                    }
-                });
-
-                await chat.sendMessage(systemPrompt);
-
-                chatSessions[namespace] = chat;
-            } catch (initError) {
-                console.error("Failed to recreate chat session:", initError);
-                return NextResponse.json(
-                    { reply: "Your session has expired. Please refresh the page to start a new conversation." },
-                    { status: 404 }
-                );
-            }
-        }
-
-        if (!userMessage || !userMessage.trim()) {
+        const userMessage = normalizeUserMessage(body.userMessage);
+        if (!userMessage) {
             return NextResponse.json(
-                { reply: "I didn't receive a message. How can I help you with your medical information?" }
+                { reply: "I didn't receive a message. How can I help you with your medical report?" },
+                { status: 400 }
             );
         }
 
-        let similarDocs = [];
-        try {
-            similarDocs = await similaritySearch(userMessage, namespace, aiModelConfig.retrievalTopK);
-        } catch (searchError) {
-            console.error("Error searching for similar documents:", searchError);
-            return NextResponse.json(
-                { reply: "I'm having trouble accessing your medical information right now. Please try asking again." }
-            );
-        }
+        const history = normalizeHistory(body.messages);
+        const context = await retrieveRagContext(userMessage, namespace);
+        const prompt = buildRagAnswerPrompt({
+            question: userMessage,
+            context,
+            history,
+        });
 
-        const contextPrompt = buildRetrievedContextPrompt(similarDocs);
-        await chat.sendMessage(contextPrompt);
+        const model = genAI.getGenerativeModel({ model: aiModelConfig.chatModel });
+        const result = await model.generateContent(prompt);
+        const reply = result.response.text();
 
-        try {
-            const result = await chat.sendMessage(userMessage);
-            const reply = result.response.text();
-            return NextResponse.json({ reply });
-        } catch (modelError) {
-            console.error("Error from AI model:", modelError);
-            delete chatSessions[namespace];
-            return NextResponse.json(
-                { reply: "I'm sorry, I'm having trouble accessing your medical information right now. Please try asking again." }
-            );
-        }
-
+        return NextResponse.json({
+            reply,
+            sources: context.sources.map(({ id, sourceType, score, chunkIndex, reportId }) => ({
+                id,
+                sourceType,
+                score,
+                chunkIndex,
+                reportId,
+            })),
+            confidence: context.confidence,
+            mode: context.mode,
+        });
     } catch (error) {
         console.error("Chat API error:", error);
         return NextResponse.json(
-            { reply: "I'm having trouble responding right now. Please try again." }
+            { reply: "I'm having trouble responding right now. Please try again." },
+            { status: 500 }
         );
     }
 }

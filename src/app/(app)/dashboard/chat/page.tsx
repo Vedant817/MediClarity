@@ -10,88 +10,97 @@ import clsx from "clsx";
 import { useUser } from "@clerk/nextjs";
 import Markdown from "react-markdown";
 
+interface RagSourceBadge {
+    id: string;
+    sourceType: string;
+    score: number;
+    chunkIndex?: number;
+    reportId?: string;
+}
+
 type Message = {
     role: "user" | "assistant";
     content: string;
+    confidence?: "high" | "medium" | "low";
+    sources?: RagSourceBadge[];
+};
+
+const confidenceStyles = {
+    high: "bg-green-50 text-green-700 border-green-200",
+    medium: "bg-amber-50 text-amber-700 border-amber-200",
+    low: "bg-red-50 text-red-700 border-red-200",
 };
 
 const AIChatPage = () => {
-    const { user } = useUser();
+    const { user, isLoaded } = useUser();
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
     const [isThinking, setIsThinking] = useState(false);
-    const [summary, setSummary] = useState<string>("");
-    const [ocr, setOcr] = useState<string>("");
-    const [isLoadingData, setIsLoadingData] = useState(true);
     const [isSessionInitialized, setIsSessionInitialized] = useState(false);
+    const [initializationError, setInitializationError] = useState<string | null>(null);
+    const [contextStats, setContextStats] = useState<{ chunkCount?: number; reportId?: string }>({});
 
     const sessionIdRef = useRef<string>("");
     const bottomRef = useRef<HTMLDivElement>(null);
 
     const initializeSession = useCallback(async () => {
-        if (!user || isSessionInitialized) return;
+        if (!user) return;
 
         setIsThinking(true);
+        setInitializationError(null);
         try {
             const res = await fetch("/api/chatbot/initialize-session", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    sessionId: sessionIdRef.current,
-                    userId: user.id,
-                    summary,
-                    ocr,
-                }),
+                body: JSON.stringify({ sessionId: sessionIdRef.current }),
             });
 
-            if (!res.ok) throw new Error("Failed to initialize session");
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to initialize report context");
+            }
+
+            setContextStats({ chunkCount: data.chunkCount, reportId: data.reportId });
+            setMessages([]);
             setIsSessionInitialized(true);
         } catch (error) {
             console.error("Session initialization error:", error);
+            setInitializationError(error instanceof Error ? error.message : "Unable to prepare report context");
         } finally {
             setIsThinking(false);
         }
-    }, [user, isSessionInitialized, summary, ocr]);
+    }, [user]);
 
-    const fetchSummaryAndOcr = useCallback(async () => {
-        if (!user) return;
-
+    const endSession = useCallback(async () => {
+        if (!sessionIdRef.current) return;
         try {
-            const res = await fetch(`/api/chatbot/user-data?userId=${user.id}`);
-            if (!res.ok) {
-                if (res.status !== 404) console.error("Error fetching user data:", res.statusText);
-                setSummary("");
-                setOcr("");
-            } else {
-                const data = await res.json();
-                setSummary(data.summary || "");
-                setOcr(data.ocr || "");
-            }
+            await fetch("/api/chatbot/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sessionId: sessionIdRef.current, endSession: true }),
+            });
         } catch (error) {
-            console.error("Fetch summary/OCR failed:", error);
-            setSummary("");
-            setOcr("");
-        } finally {
-            setIsLoadingData(false);
-            initializeSession();
+            console.error("Failed to end session:", error);
         }
-    }, [user, initializeSession]);
+    }, []);
 
     useEffect(() => {
-        if (user) {
-            sessionIdRef.current = uuidv4();
-            fetchSummaryAndOcr();
-        }
+        if (!isLoaded || !user) return;
+
+        sessionIdRef.current = uuidv4();
+        setIsSessionInitialized(false);
+        initializeSession();
 
         return () => {
-            if (sessionIdRef.current) endSession();
+            endSession();
         };
-    }, [user, fetchSummaryAndOcr]);
+    }, [isLoaded, user, initializeSession, endSession]);
 
     const sendMessage = async () => {
-        if (!input.trim() || !user || isLoadingData || !isSessionInitialized) return;
+        if (!input.trim() || !user || !isSessionInitialized || isThinking) return;
 
-        const userMessage: Message = { role: "user", content: input };
+        const question = input.trim();
+        const userMessage: Message = { role: "user", content: question };
         const updatedMessages = [...messages, userMessage];
         setMessages(updatedMessages);
         setInput("");
@@ -103,15 +112,20 @@ const AIChatPage = () => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     sessionId: sessionIdRef.current,
-                    userId: user.id,
-                    userMessage: input,
+                    userMessage: question,
+                    messages: updatedMessages,
                 }),
             });
 
-            if (!res.ok) throw new Error("Chat request failed");
-
             const data = await res.json();
-            const assistantMessage: Message = { role: "assistant", content: data.reply };
+            if (!res.ok) throw new Error(data.reply || "Chat request failed");
+
+            const assistantMessage: Message = {
+                role: "assistant",
+                content: data.reply,
+                confidence: data.confidence,
+                sources: data.sources,
+            };
             setMessages((prev) => [...prev, assistantMessage]);
         } catch (error) {
             console.error("Chat error:", error);
@@ -131,29 +145,15 @@ const AIChatPage = () => {
         }
     };
 
-    const endSession = async () => {
-        if (!sessionIdRef.current) return;
-        try {
-            await fetch("/api/chatbot/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ sessionId: sessionIdRef.current, endSession: true }),
-            });
-            console.log("Session ended successfully ✅");
-        } catch (error) {
-            console.error("Failed to end session:", error);
-        }
-    };
-
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, isThinking]);
 
-    if (isLoadingData) {
+    if (!isLoaded) {
         return (
             <div className="flex items-center justify-center h-screen w-full">
                 <LoaderCircle className="w-8 h-8 animate-spin text-teal-600" />
-                <span className="ml-2">Loading your data...</span>
+                <span className="ml-2">Loading your account...</span>
             </div>
         );
     }
@@ -163,15 +163,35 @@ const AIChatPage = () => {
             <div className="flex-grow overflow-hidden">
                 <ScrollArea className="h-full w-full">
                     <div className="container mx-auto px-4 py-6 space-y-4">
-                        <h1 className="text-2xl font-bold mb-4">💬 AI Medical Assistant</h1>
+                        <div className="space-y-2">
+                            <h1 className="text-2xl font-bold">💬 AI Medical Report Copilot</h1>
+                            <p className="text-sm text-gray-500">
+                                RAG-grounded answers with source IDs, confidence labels, and medical safety boundaries.
+                            </p>
+                            {isSessionInitialized && (
+                                <p className="text-xs text-gray-500">
+                                    Prepared {contextStats.chunkCount ?? 0} searchable report chunks for this session.
+                                </p>
+                            )}
+                        </div>
 
-                        {messages.length === 0 && (
+                        {initializationError && (
+                            <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                                <p className="font-semibold">Report context is not ready.</p>
+                                <p>{initializationError}</p>
+                                <Button className="mt-3" variant="outline" onClick={initializeSession} disabled={isThinking}>
+                                    Retry context preparation
+                                </Button>
+                            </div>
+                        )}
+
+                        {messages.length === 0 && !initializationError && (
                             <div className="text-center text-gray-500 py-8">
-                                <p>Ask me anything about your medical report.</p>
+                                <p>Ask about findings, abnormal values, follow-up instructions, or medical terms from your latest report.</p>
                                 {!isSessionInitialized && (
                                     <div className="mt-2 flex items-center justify-center gap-2">
                                         <LoaderCircle className="w-4 h-4 animate-spin" />
-                                        <span className="text-sm">Preparing your medical context...</span>
+                                        <span className="text-sm">Preparing source-grounded medical context...</span>
                                     </div>
                                 )}
                             </div>
@@ -181,20 +201,32 @@ const AIChatPage = () => {
                             <div
                                 key={index}
                                 className={clsx(
-                                    "max-w-md px-4 py-2 rounded-lg whitespace-pre-wrap",
+                                    "max-w-2xl px-4 py-3 rounded-lg whitespace-pre-wrap",
                                     msg.role === "user"
                                         ? "ml-auto bg-teal-100 text-teal-900"
                                         : "mr-auto bg-gray-100 text-gray-800"
                                 )}
                             >
                                 <Markdown>{msg.content}</Markdown>
+                                {msg.role === "assistant" && msg.confidence && (
+                                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                                        <span className={clsx("rounded-full border px-2 py-1", confidenceStyles[msg.confidence])}>
+                                            {msg.confidence.toUpperCase()} confidence
+                                        </span>
+                                        {msg.sources?.map((source) => (
+                                            <span key={source.id} className="rounded-full border border-gray-200 bg-white px-2 py-1 text-gray-600">
+                                                {source.id}: {source.sourceType}{typeof source.chunkIndex === "number" ? ` #${source.chunkIndex + 1}` : ""}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ))}
 
                         {isThinking && (
                             <div className="mr-auto text-gray-600 text-sm flex items-center gap-2 animate-pulse">
                                 <LoaderCircle className="w-4 h-4 animate-spin" />
-                                Thinking...
+                                Thinking with report retrieval...
                             </div>
                         )}
 
@@ -206,7 +238,7 @@ const AIChatPage = () => {
             <div className="border-t p-4 bg-white shadow-sm">
                 <div className="container mx-auto flex gap-2">
                     <Input
-                        placeholder="Ask about your medical report..."
+                        placeholder="Ask a source-grounded question about your medical report..."
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}

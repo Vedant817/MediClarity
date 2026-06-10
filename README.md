@@ -102,9 +102,24 @@ External research references used for this model strategy:
 4. `/api/ocr` sends the document URL to OCR and returns extracted page text.
 5. `/api/summaries` generates a structured patient-friendly summary.
 6. `/api/reports/save` stores the report, OCR text, and summary in MongoDB.
-7. `/api/chatbot/initialize-session` embeds summary/OCR chunks into a Pinecone namespace.
-8. `/api/chatbot/chat` retrieves relevant chunks and answers questions with safety constraints.
+7. `/api/chatbot/initialize-session` loads the latest saved report server-side, chunks summary/OCR, and embeds it into a user-scoped Pinecone namespace.
+8. `/api/chatbot/chat` retrieves, lightly reranks, cites, and answers from relevant chunks with safety constraints.
 9. `/api/translate` translates the summary while preserving numbers, units, and medical terms.
+
+## Production RAG chatbot architecture
+
+The chatbot is designed as a **stateless, source-grounded RAG pipeline** rather than a simple Q&A wrapper around a model:
+
+1. **Server-owned context loading** — the browser sends only a `sessionId`; `/api/chatbot/initialize-session` derives the Clerk `userId`, loads the user's latest saved report from MongoDB, and never trusts client-sent OCR/summary content for retrieval setup.
+2. **User/session namespace isolation** — vector namespaces are generated from a SHA-256 hash of `userId + sessionId`, so vector search and deletion are scoped to the authenticated user session rather than a raw client namespace.
+3. **Chunked ingestion** — summaries, OCR text, and a high-priority overview are split into retrieval-sized chunks with metadata such as `reportId`, `type`, `chunkIndex`, `sessionId`, and timestamp before embedding.
+4. **Candidate retrieval + lightweight reranking** — `/api/chatbot/chat` retrieves a wider candidate set, combines vector score with lexical overlap and priority metadata, then selects the strongest context for answer generation.
+5. **Source-aware prompt assembly** — retrieved chunks are wrapped as untrusted `<source>` blocks with source IDs (`S1`, `S2`, etc.), and the model is instructed to cite those source IDs for patient-specific claims.
+6. **Confidence-aware responses** — the API returns the answer plus source badges and a `high`/`medium`/`low` confidence label so the UI can communicate grounding strength.
+7. **No in-memory chat dependency** — answer generation is stateless per request and uses recent client-visible conversation history only for continuity; the report facts come from retrieval, not process memory.
+8. **Clinical safety boundary** — the answer contract separates uploaded-report facts from general education, avoids diagnosis/treatment decisions, and escalates urgent symptoms to clinician/emergency review.
+
+This architecture is still an MVP, but it is intentionally closer to a production medical RAG system: authenticated ingestion, scoped vector stores, metadata-rich chunks, cited responses, confidence labels, prompt-injection framing, and explicit clinical limits.
 
 ## Environment setup
 
