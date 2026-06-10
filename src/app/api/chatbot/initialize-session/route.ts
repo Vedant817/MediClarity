@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
 import { embedDocuments } from "@/lib/embeddings";
+import { aiModelConfig } from "@/lib/ai/model-config";
+import { buildChatSystemPrompt } from "@/lib/ai/prompts";
+import { normalizeReportText } from "@/lib/ai/validation";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const chatSessions: Record<string, ChatSession> = {};
 
 export async function POST(req: Request) {
     try {
-        const { sessionId, userId, summary, ocr } = await req.json();
+        const { userId } = await auth();
+        const body = await req.json();
+        const { sessionId } = body;
+        const summary = normalizeReportText(body.summary);
+        const ocr = normalizeReportText(body.ocr);
 
         if (!sessionId || !userId) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -17,16 +25,9 @@ export async function POST(req: Request) {
             delete chatSessions[sessionId];
         }
 
-        const model = await genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+        const model = await genAI.getGenerativeModel({ model: aiModelConfig.chatModel });
 
-        const systemPrompt = `
-You are an AI Medical Assistant that helps patients understand their medical reports.
-Important: The user has already uploaded their medical data. You DO have access to the patient's medical information through the vector database.
-Each time a user asks a question, you'll be provided with relevant information extracted from their medical records.
-Always acknowledge that you have their data and answer based on the specific medical context provided.
-Never say you don't have access to their medical information.
-Explain medical terms in simple language and be specific to their personal medical context.
-`;
+        const systemPrompt = buildChatSystemPrompt();
 
         const chat = await model.startChat({
             history: [

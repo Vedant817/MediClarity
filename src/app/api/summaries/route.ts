@@ -1,61 +1,23 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
+import { aiModelConfig } from "@/lib/ai/model-config";
+import { buildSummaryPrompt } from "@/lib/ai/prompts";
+import { normalizeReportText } from "@/lib/ai/validation";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
-const strictPrompt = (text: string) => `
-You are a medical document assistant. Summarize the following medical report content into clear, structured, bullet-point format.
-
-⚠️ Be VERY STRICT in extracting only useful and meaningful medical info. NO fluff.
-🩺 Focus on:
-- Patient details (if any)
-- Reason for medical assessment
-- Site/time/events
-- Consent status
-- Observers
-- Presenting complaint
-- Sources of information
-- Any clear diagnostic, procedural or treatment notes
-- Summarization & Highlighting: Provide concise summaries of complex reports. Highlight key findings, abnormalities, or values outside normal ranges.
-
-📄 Use this strict format:
-
-**🔹 Patient Details**
-- Name: ...
-- DOB: ...
-- Hospital #: ...
-
-**🔹 Reason for Medical Assessment**
-- ...
-
-**🔹 Timeline of Events**
-- [Date/time] - [Event detail]
-
-**🔹 Consent**
-- ...
-
-**🔹 Observers**
-- ...
-
-**🔹 Presenting Complaint**
-- ...
-
-**🔹 Source of Information**
-- ...
-
-Now, here is the report content:
-
-"${text}"
-`;
 
 
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { text } = body;
+        const text = normalizeReportText(body.text);
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-        const result = await model.generateContent(strictPrompt(text));
+        if (!text) {
+            return NextResponse.json({ error: "Report text is required" }, { status: 400 });
+        }
+
+        const model = genAI.getGenerativeModel({ model: aiModelConfig.summaryModel });
+        const result = await model.generateContent(buildSummaryPrompt(text));
         const response = await result.response;
         const summary = response.text();
 

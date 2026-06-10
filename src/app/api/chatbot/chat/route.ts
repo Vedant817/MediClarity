@@ -1,14 +1,22 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { similaritySearch, deleteNamespace } from "@/lib/embeddings";
 import { GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
+import { aiModelConfig } from "@/lib/ai/model-config";
+import { buildChatSystemPrompt, buildRetrievedContextPrompt } from "@/lib/ai/prompts";
 
 const chatSessions: Record<string, ChatSession> = {};
 
 export async function POST(req: Request) {
     try {
-        const { sessionId, userId, userMessage, endSession } = await req.json();
+        const { userId } = await auth();
+        const { sessionId, userMessage, endSession } = await req.json();
 
-        if (endSession && sessionId) {
+        if (!sessionId || !userId) {
+            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+        }
+
+        if (endSession) {
             await deleteNamespace(sessionId);
             if (chatSessions[sessionId]) {
                 delete chatSessions[sessionId];
@@ -16,24 +24,13 @@ export async function POST(req: Request) {
             return NextResponse.json({ status: "Session ended" });
         }
 
-        if (!sessionId || !userId) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-        }
-
         let chat = chatSessions[sessionId];
         if (!chat) {
             try {
                 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-                const model = await genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+                const model = await genAI.getGenerativeModel({ model: aiModelConfig.chatModel });
 
-                const systemPrompt = `
-You are an AI Medical Assistant that helps patients understand their medical reports.
-Important: The user has already uploaded their medical data. You DO have access to the patient's medical information through the vector database.
-Each time a user asks a question, you'll be provided with relevant information extracted from their medical records.
-Always acknowledge that you have their data and answer based on the specific medical context provided.
-Never say you don't have access to their medical information.
-Explain medical terms in simple language and be specific to their personal medical context.
-`;
+                const systemPrompt = buildChatSystemPrompt();
 
                 chat = await model.startChat({
                     history: [
@@ -67,8 +64,7 @@ Explain medical terms in simple language and be specific to their personal medic
 
         let similarDocs = [];
         try {
-            similarDocs = await similaritySearch(userMessage, sessionId, 5);
-            console.log(similarDocs);
+            similarDocs = await similaritySearch(userMessage, sessionId, aiModelConfig.retrievalTopK);
         } catch (searchError) {
             console.error("Error searching for similar documents:", searchError);
             return NextResponse.json(
@@ -76,21 +72,7 @@ Explain medical terms in simple language and be specific to their personal medic
             );
         }
 
-        let contextPrompt = "";
-        if (similarDocs && similarDocs.length > 0) {
-            contextPrompt = `
-I have access to your medical records. Here is the relevant information from your medical history related to your question:
-
-${similarDocs.join("\n\n")}
-
-Using this information to respond to your question...
-`;
-        } else {
-            contextPrompt = `
-I have access to your medical records, but couldn't find specific information related to your question. I'll provide general medical information instead.
-`;
-        }
-
+        const contextPrompt = buildRetrievedContextPrompt(similarDocs);
         await chat.sendMessage(contextPrompt);
 
         try {

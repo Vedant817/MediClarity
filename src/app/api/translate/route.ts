@@ -1,26 +1,23 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
+import { aiModelConfig } from "@/lib/ai/model-config";
+import { buildTranslationPrompt } from "@/lib/ai/prompts";
+import { normalizeReportText, normalizeTargetLanguage } from "@/lib/ai/validation";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
-const translationPrompt = (text: string, targetLang: string) => `
-You are a medical translation assistant.
-
-Your task is to strictly translate the following medical summary into **${targetLang}**, with **NO commentary, no extra formatting, and no additional explanations**.
-
-⚠️ Only return the translated text, nothing else.
-
-Original summary:
-"""${text}"""
-`;
 
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { text, targetLang } = body;
+        const text = normalizeReportText(body.text);
+        const targetLang = normalizeTargetLanguage(body.targetLang);
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-        const result = await model.generateContent(translationPrompt(text, targetLang));
+        if (!text) {
+            return NextResponse.json({ error: "Text is required" }, { status: 400 });
+        }
+
+        const model = genAI.getGenerativeModel({ model: aiModelConfig.translationModel });
+        const result = await model.generateContent(buildTranslationPrompt(text, targetLang));
         const response = result.response;
         const translatedText = response.text();
         

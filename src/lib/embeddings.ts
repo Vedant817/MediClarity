@@ -2,9 +2,10 @@ import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { Document } from "langchain/document";
 import { PineconeStore } from "@langchain/pinecone";
 import { getPineconeIndex } from "./vector";
+import { aiModelConfig } from "./ai/model-config";
 
 const embeddingModel = new GoogleGenerativeAIEmbeddings({
-    model: "gemini-embedding-exp-03-07",
+    model: aiModelConfig.embeddingModel,
     apiKey: process.env.GEMINI_API_KEY!,
 });
 

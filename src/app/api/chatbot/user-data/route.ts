@@ -1,16 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import connectDB from "@/lib/db";
 import Report from "@/models/report";
 
-export async function GET(req: NextRequest) {
-    await connectDB();
-
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
+export async function GET() {
+    const { userId } = await auth();
 
     if (!userId) {
-        return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    await connectDB();
 
     try {
         const report = await Report.findOne({ userId }).sort({ createdAt: -1 });
