@@ -25,15 +25,20 @@ const allowedMimeTypes = new Set([
 
 const maxUploadBytes = Number(process.env.MAX_UPLOAD_BYTES ?? 10 * 1024 * 1024);
 
+function sanitizeFileName(fileName: string) {
+    return fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "medical-report";
+}
+
 const uploadToCloudinary = (fileUri: string, fileName: string, userId: string): Promise<CloudinaryResponse> => {
     return new Promise((resolve, reject) => {
         cloudinary.uploader
             .upload(fileUri, {
                 invalidate: true,
                 resource_type: "auto",
-                filename_override: fileName,
+                filename_override: sanitizeFileName(fileName),
                 folder: `mediclarity/${userId}`,
                 use_filename: true,
+                unique_filename: true,
             })
             .then((result: CloudinaryUploadResult) => {
                 resolve({ success: true, result });
@@ -87,7 +92,6 @@ export async function POST(req: NextRequest) {
         }
     } catch (error) {
         console.error("Upload error:", error);
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-        return NextResponse.json({ message: "error", error: errorMessage }, { status: 500 });
+        return NextResponse.json({ message: "error", error: "Upload failed" }, { status: 500 });
     }
 }

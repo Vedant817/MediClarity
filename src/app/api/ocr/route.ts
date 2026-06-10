@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { runOcrFromImageUrl, runOcrFromPdfUrl } from '@/lib/ocr';
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { runOcrFromImageUrl, runOcrFromPdfUrl } from "@/lib/ocr";
+import { isAllowedCloudinaryDocumentUrl } from "@/lib/security/document-url";
 
 interface OCRPage {
     index: number;
@@ -8,20 +10,23 @@ interface OCRPage {
 
 export async function POST(request: NextRequest) {
     try {
+        const { userId } = await auth();
+
+        if (!userId) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const { documentUrl } = await request.json();
 
-        if (!documentUrl) {
-            return NextResponse.json({ error: 'Document URL is required' }, { status: 400 });
+        if (!isAllowedCloudinaryDocumentUrl(documentUrl, userId)) {
+            return NextResponse.json({ error: "Document URL is not allowed" }, { status: 400 });
         }
 
-        const isPdf = documentUrl.toLowerCase().endsWith('.pdf');
+        const isPdf = new URL(documentUrl).pathname.toLowerCase().endsWith(".pdf");
 
-        let result;
-        if (isPdf) {
-            result = await runOcrFromPdfUrl(documentUrl);
-        } else {
-            result = await runOcrFromImageUrl(documentUrl);
-        }
+        const result = isPdf
+            ? await runOcrFromPdfUrl(documentUrl)
+            : await runOcrFromImageUrl(documentUrl);
 
         const extractedText = result?.pages?.map((page: OCRPage) => {
             return {
@@ -31,10 +36,10 @@ export async function POST(request: NextRequest) {
         });
         return NextResponse.json({ extractedText: extractedText || [] });
 
-    } catch (error: Error | unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+    } catch (error) {
+        console.error("OCR processing failed:", error);
         return NextResponse.json(
-            { error: 'Failed to process document', details: errorMessage },
+            { error: "Failed to process document" },
             { status: 500 }
         );
     }

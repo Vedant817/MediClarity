@@ -1,21 +1,26 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import connectDB from "@/lib/db";
 import Report from "@/models/report";
-import { auth } from '@clerk/nextjs/server'
+import { normalizeReportText } from "@/lib/ai/validation";
+import { isAllowedCloudinaryDocumentUrl } from "@/lib/security/document-url";
 
 export async function POST(req: Request) {
     const { userId } = await auth();
 
     if (!userId) {
-        return new NextResponse('Unauthorized', { status: 401 });
+        return new NextResponse("Unauthorized", { status: 401 });
     }
     await connectDB();
 
     try {
-        const { fileUrl, summary, ocr } = await req.json();
+        const body = await req.json();
+        const fileUrl = typeof body.fileUrl === "string" ? body.fileUrl : "";
+        const summary = normalizeReportText(body.summary);
+        const ocr = normalizeReportText(body.ocr);
 
-        if (!fileUrl || !summary || !ocr) {
-            return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+        if (!isAllowedCloudinaryDocumentUrl(fileUrl, userId) || !summary || !ocr) {
+            return NextResponse.json({ error: "Missing or invalid fields" }, { status: 400 });
         }
 
         const report = await Report.create({ userId, fileUrl, summary, ocr });

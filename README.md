@@ -43,7 +43,11 @@ flowchart LR
 - **Reusable clinical safety contract:** summary, translation, and chat prompts now share a grounding-first safety policy.
 - **Input normalization:** report text and target-language inputs are trimmed and bounded before model calls.
 - **Authenticated report reads:** report list/detail APIs now derive the user from Clerk auth instead of trusting a client-supplied `userId`.
-- **Upload validation:** upload route now requires authentication, checks MIME type, enforces a configurable file-size limit, and stores files in per-user Cloudinary folders.
+- **User-scoped vector namespaces:** RAG session namespaces are derived from both Clerk `userId` and `sessionId`, preventing cross-user namespace deletion/search if a session ID is reused or guessed.
+- **Controlled OCR inputs:** OCR only accepts HTTPS Cloudinary URLs from this app's per-user upload folder instead of arbitrary remote URLs.
+- **Upload validation:** upload route now requires authentication, checks MIME type, enforces a configurable file-size limit, sanitizes filenames, and stores files in per-user Cloudinary folders.
+- **Prompt-injection framing:** report text, OCR text, and retrieved snippets are explicitly delimited as untrusted clinical content so models extract facts rather than follow document-embedded instructions.
+- **Chunked RAG ingestion:** long summaries/OCR documents are chunked before embedding, improving retrieval quality over whole-document vectors.
 - **Open-weight adaptation plan:** the repo documents how to move from API-hosted models to medically adapted open-weight models without pretending fine-tuning can be done safely inside the web app runtime.
 
 ## Domain analysis: important issues and product gaps

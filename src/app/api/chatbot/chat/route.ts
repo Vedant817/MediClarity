@@ -4,6 +4,7 @@ import { similaritySearch, deleteNamespace } from "@/lib/embeddings";
 import { GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
 import { aiModelConfig } from "@/lib/ai/model-config";
 import { buildChatSystemPrompt, buildRetrievedContextPrompt } from "@/lib/ai/prompts";
+import { getUserVectorNamespace, isValidSessionId } from "@/lib/security/session";
 
 const chatSessions: Record<string, ChatSession> = {};
 
@@ -12,19 +13,21 @@ export async function POST(req: Request) {
         const { userId } = await auth();
         const { sessionId, userMessage, endSession } = await req.json();
 
-        if (!sessionId || !userId) {
+        if (!isValidSessionId(sessionId) || !userId) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
+        const namespace = getUserVectorNamespace(userId, sessionId);
+
         if (endSession) {
-            await deleteNamespace(sessionId);
-            if (chatSessions[sessionId]) {
-                delete chatSessions[sessionId];
+            await deleteNamespace(namespace);
+            if (chatSessions[namespace]) {
+                delete chatSessions[namespace];
             }
             return NextResponse.json({ status: "Session ended" });
         }
 
-        let chat = chatSessions[sessionId];
+        let chat = chatSessions[namespace];
         if (!chat) {
             try {
                 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
@@ -46,7 +49,7 @@ export async function POST(req: Request) {
 
                 await chat.sendMessage(systemPrompt);
 
-                chatSessions[sessionId] = chat;
+                chatSessions[namespace] = chat;
             } catch (initError) {
                 console.error("Failed to recreate chat session:", initError);
                 return NextResponse.json(
@@ -64,7 +67,7 @@ export async function POST(req: Request) {
 
         let similarDocs = [];
         try {
-            similarDocs = await similaritySearch(userMessage, sessionId, aiModelConfig.retrievalTopK);
+            similarDocs = await similaritySearch(userMessage, namespace, aiModelConfig.retrievalTopK);
         } catch (searchError) {
             console.error("Error searching for similar documents:", searchError);
             return NextResponse.json(
@@ -81,7 +84,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ reply });
         } catch (modelError) {
             console.error("Error from AI model:", modelError);
-            delete chatSessions[sessionId];
+            delete chatSessions[namespace];
             return NextResponse.json(
                 { reply: "I'm sorry, I'm having trouble accessing your medical information right now. Please try asking again." }
             );

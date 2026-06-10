@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
-import { embedDocuments } from "@/lib/embeddings";
+import { deleteNamespace, embedDocuments } from "@/lib/embeddings";
 import { aiModelConfig } from "@/lib/ai/model-config";
 import { buildChatSystemPrompt } from "@/lib/ai/prompts";
 import { normalizeReportText } from "@/lib/ai/validation";
+import { chunkText } from "@/lib/ai/chunking";
+import { getUserVectorNamespace, isValidSessionId } from "@/lib/security/session";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const chatSessions: Record<string, ChatSession> = {};
@@ -17,12 +19,14 @@ export async function POST(req: Request) {
         const summary = normalizeReportText(body.summary);
         const ocr = normalizeReportText(body.ocr);
 
-        if (!sessionId || !userId) {
+        if (!isValidSessionId(sessionId) || !userId) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        if (chatSessions[sessionId]) {
-            delete chatSessions[sessionId];
+        const namespace = getUserVectorNamespace(userId, sessionId);
+
+        if (chatSessions[namespace]) {
+            delete chatSessions[namespace];
         }
 
         const model = await genAI.getGenerativeModel({ model: aiModelConfig.chatModel });
@@ -43,9 +47,9 @@ export async function POST(req: Request) {
 
         await chat.sendMessage(systemPrompt);
 
-        chatSessions[sessionId] = chat;
+        chatSessions[namespace] = chat;
 
-        const chunks = [];
+        const chunks: { text: string; metadata: Record<string, unknown> & { userId: string } }[] = [];
 
         const baseMetadata = {
             userId,
@@ -54,16 +58,20 @@ export async function POST(req: Request) {
         };
 
         if (summary && summary.trim()) {
-            chunks.push({
-                text: `MEDICAL SUMMARY: ${summary}`,
-                metadata: { ...baseMetadata, type: "summary" }
+            chunkText(summary).forEach((chunk, index) => {
+                chunks.push({
+                    text: `MEDICAL SUMMARY CHUNK ${index + 1}: ${chunk}`,
+                    metadata: { ...baseMetadata, type: "summary", chunkIndex: index }
+                });
             });
         }
 
         if (ocr && ocr.trim()) {
-            chunks.push({
-                text: `MEDICAL REPORT OCR TEXT: ${ocr}`,
-                metadata: { ...baseMetadata, type: "ocr" }
+            chunkText(ocr).forEach((chunk, index) => {
+                chunks.push({
+                    text: `MEDICAL REPORT OCR CHUNK ${index + 1}: ${chunk}`,
+                    metadata: { ...baseMetadata, type: "ocr", chunkIndex: index }
+                });
             });
         }
 
@@ -82,7 +90,8 @@ ${ocr ? `\nREPORT DETAILS: ${ocr.substring(0, 1000)}${ocr.length > 1000 ? '...' 
         let dataStatus = "no_data";
         if (chunks.length > 0) {
             try {
-                await embedDocuments(chunks, sessionId);
+                await deleteNamespace(namespace);
+                await embedDocuments(chunks, namespace);
                 dataStatus = "data_embedded";
                 console.log(`Created ${chunks.length} embeddings for session ${sessionId}`);
             } catch (embedError) {
