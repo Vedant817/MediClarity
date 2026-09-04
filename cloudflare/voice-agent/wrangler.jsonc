@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mediclarity-voice-agent",
+  "main": "src/server.ts",
+  "compatibility_date": "2026-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "ai": { "binding": "AI" },
+  "vars": {
+    "NEXT_ORIGIN": "http://localhost:3000",
+    "ALLOWED_ORIGIN": "http://localhost:3000",
+    "TOKEN_AUDIENCE": "mediclarity-voice-worker"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "PatientVoiceAgent", "class_name": "PatientVoiceAgent" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["PatientVoiceAgent"] }
+  ],
+  "observability": { "enabled": true }
+}

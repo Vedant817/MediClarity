@@ -1,0 +1,28 @@
+{
+  "name": "@mediclarity/voice-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cloudflare/voice": "0.4.0",
+    "agents": "0.22.0",
+    "ai": "7.0.90",
+    "workers-ai-provider": "4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "typescript": "5.9.2",
+    "vitest": "^4.1.0",
+    "wrangler": "4.128.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
