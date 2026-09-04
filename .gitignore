@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -43,3 +44,7 @@ next-env.d.ts
 /temp
 
 /attachments
+
+# local Python artifacts for the optional fine-tune track
+__pycache__/
+*.py[cod]
