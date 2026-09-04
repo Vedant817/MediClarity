@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MediClarity de-identified extraction row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["instruction", "input", "output", "metadata"],
+  "properties": {
+    "instruction": { "const": "Extract source-reported laboratory results as JSON. Do not invent values or reference intervals." },
+    "input": { "type": "string", "minLength": 1 },
+    "output": { "type": "string", "minLength": 2 },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["synthetic", "locale", "source_document_id"],
+      "properties": {
+        "synthetic": { "type": "boolean" },
+        "locale": { "type": "string" },
+        "source_document_id": { "type": "string" },
+        "reviewer": { "type": "string" }
+      }
+    }
+  }
+}

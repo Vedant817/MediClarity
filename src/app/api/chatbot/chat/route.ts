@@ -1,114 +1,104 @@
+import { auth } from "@clerk/nextjs/server";
+import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { NextResponse } from "next/server";
-import { similaritySearch, deleteNamespace } from "@/lib/embeddings";
-import { GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
+import connectDB from "@/lib/db";
+import { getLLM, llmContentToText } from "@/lib/llm";
+import Conversation, { IMessage } from "@/models/conversation";
 
-const chatSessions: Record<string, ChatSession> = {};
+export const runtime = "nodejs";
+
+const conversationKind = "records-chat";
+const disclaimer = "For information only, not medical advice. A qualified clinician should interpret these results in your full clinical context.";
+const systemPrompt = `You are a health information assistant, not a doctor.
+Answer patient-specific questions only from the medical-record context supplied with the message.
+If the requested information is absent, say exactly: "Not in report - ask your doctor".
+Never diagnose, prescribe, recommend changing treatment, or invent findings.
+Explain terms in simple language and distinguish general education from facts present in the records.
+End every response with this exact disclaimer: "${disclaimer}"`;
+
+function toLangChainHistory(messages: IMessage[]) {
+  return messages.slice(-20).map((message) =>
+    message.role === "assistant"
+      ? new AIMessage(message.content)
+      : new HumanMessage(message.content),
+  );
+}
 
 export async function POST(req: Request) {
-    try {
-        const { sessionId, userId, userMessage, endSession } = await req.json();
-
-        if (endSession && sessionId) {
-            await deleteNamespace(sessionId);
-            if (chatSessions[sessionId]) {
-                delete chatSessions[sessionId];
-            }
-            return NextResponse.json({ status: "Session ended" });
-        }
-
-        if (!sessionId || !userId) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-        }
-
-        let chat = chatSessions[sessionId];
-        if (!chat) {
-            try {
-                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-                const model = await genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-                const systemPrompt = `
-You are an AI Medical Assistant that helps patients understand their medical reports.
-Important: The user has already uploaded their medical data. You DO have access to the patient's medical information through the vector database.
-Each time a user asks a question, you'll be provided with relevant information extracted from their medical records.
-Always acknowledge that you have their data and answer based on the specific medical context provided.
-Never say you don't have access to their medical information.
-Explain medical terms in simple language and be specific to their personal medical context.
-`;
-
-                chat = await model.startChat({
-                    history: [
-                        { role: "user", parts: [{ text: "I need help understanding my medical reports" }] },
-                        { role: "model", parts: [{ text: "I'm your AI Medical Assistant. I have access to your medical information and can help you understand your reports. What would you like to know about your medical data?" }] }
-                    ],
-                    generationConfig: {
-                        temperature: 0.2,
-                        topP: 0.8,
-                        topK: 40,
-                    }
-                });
-
-                await chat.sendMessage(systemPrompt);
-
-                chatSessions[sessionId] = chat;
-            } catch (initError) {
-                console.error("Failed to recreate chat session:", initError);
-                return NextResponse.json(
-                    { reply: "Your session has expired. Please refresh the page to start a new conversation." },
-                    { status: 404 }
-                );
-            }
-        }
-
-        if (!userMessage || !userMessage.trim()) {
-            return NextResponse.json(
-                { reply: "I didn't receive a message. How can I help you with your medical information?" }
-            );
-        }
-
-        let similarDocs = [];
-        try {
-            similarDocs = await similaritySearch(userMessage, sessionId, 5);
-            console.log(similarDocs);
-        } catch (searchError) {
-            console.error("Error searching for similar documents:", searchError);
-            return NextResponse.json(
-                { reply: "I'm having trouble accessing your medical information right now. Please try asking again." }
-            );
-        }
-
-        let contextPrompt = "";
-        if (similarDocs && similarDocs.length > 0) {
-            contextPrompt = `
-I have access to your medical records. Here is the relevant information from your medical history related to your question:
-
-${similarDocs.join("\n\n")}
-
-Using this information to respond to your question...
-`;
-        } else {
-            contextPrompt = `
-I have access to your medical records, but couldn't find specific information related to your question. I'll provide general medical information instead.
-`;
-        }
-
-        await chat.sendMessage(contextPrompt);
-
-        try {
-            const result = await chat.sendMessage(userMessage);
-            const reply = result.response.text();
-            return NextResponse.json({ reply });
-        } catch (modelError) {
-            console.error("Error from AI model:", modelError);
-            delete chatSessions[sessionId];
-            return NextResponse.json(
-                { reply: "I'm sorry, I'm having trouble accessing your medical information right now. Please try asking again." }
-            );
-        }
-
-    } catch (error) {
-        console.error("Chat API error:", error);
-        return NextResponse.json(
-            { reply: "I'm having trouble responding right now. Please try again." }
-        );
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const { sessionId, userMessage, endSession } = await req.json();
+    if (typeof sessionId !== "string" || !sessionId.trim() || sessionId.length > 128) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    await connectDB();
+    const conversation = await Conversation.findOne({
+      userId,
+      kind: conversationKind,
+      sessionId,
+    });
+    if (!conversation) {
+      return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+    }
+
+    if (endSession) {
+      return NextResponse.json({ status: "Session ended" });
+    }
+
+    if (typeof userMessage !== "string" || !userMessage.trim()) {
+      return NextResponse.json({ error: "Missing user message" }, { status: 400 });
+    }
+
+    const summary = conversation.context?.summary?.trim();
+    const ocr = conversation.context?.ocr?.trim();
+    const recordContext = [
+      summary ? `MEDICAL SUMMARY:\n${summary}` : "",
+      ocr ? `MEDICAL REPORT OCR TEXT:\n${ocr.slice(0, 100_000)}` : "",
+    ].filter(Boolean).join("\n\n") || "No report context was saved for this conversation.";
+
+    const model = getLLM("chat");
+    const result = await model.invoke([
+      new SystemMessage(systemPrompt),
+      ...toLangChainHistory(conversation.messages),
+      new HumanMessage(
+        `MEDICAL-RECORD CONTEXT:\n${recordContext}\n\nUSER QUESTION:\n${userMessage.trim()}`,
+      ),
+    ]);
+    let reply = llmContentToText(result.content).trim();
+    if (!reply) {
+      throw new Error("AI provider returned an empty records-chat response");
+    }
+    if (!reply.includes(disclaimer)) {
+      reply = `${reply}\n\n${disclaimer}`;
+    }
+
+    const timestamp = new Date();
+    await Conversation.updateOne(
+      { _id: conversation._id, userId },
+      {
+        $push: {
+          messages: {
+            $each: [
+              { role: "user", content: userMessage.trim(), timestamp },
+              { role: "assistant", content: reply, timestamp },
+            ],
+          },
+        },
+        $set: { updatedAt: timestamp },
+      }
+    );
+
+    return NextResponse.json({ reply, conversationId: conversation._id });
+  } catch (error) {
+    console.error("Chat API error:", error);
+    return NextResponse.json(
+      { error: "Chat failed", reply: "I'm having trouble responding right now. Please try again." },
+      { status: 500 }
+    );
+  }
 }

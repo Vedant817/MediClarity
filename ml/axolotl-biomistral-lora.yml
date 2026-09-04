@@ -1,0 +1,35 @@
+# Review and pin Axolotl/container revisions before executing. This config is a
+# proposed training input, not a record of a completed run.
+base_model: BioMistral/BioMistral-7B
+model_type: MistralForCausalLM
+tokenizer_type: LlamaTokenizer
+load_in_4bit: true
+strict: false
+datasets:
+  - path: /data/approved-train.jsonl
+    type: alpaca
+dataset_prepared_path: /workspace/prepared
+val_set_size: 0.1
+output_dir: /workspace/output/mediclarity-biomistral-lora
+adapter: qlora
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+lora_target_linear: true
+sequence_len: 4096
+sample_packing: true
+micro_batch_size: 2
+gradient_accumulation_steps: 8
+num_epochs: 3
+learning_rate: 0.0002
+optimizer: adamw_bnb_8bit
+lr_scheduler: cosine
+warmup_ratio: 0.03
+bf16: auto
+tf32: true
+gradient_checkpointing: true
+logging_steps: 10
+saves_per_epoch: 1
+seed: 42
+special_tokens:
+  pad_token: <unk>

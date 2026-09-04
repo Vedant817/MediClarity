@@ -1,28 +1,54 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { auth } from "@clerk/nextjs/server";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { NextRequest, NextResponse } from "next/server";
+import { getLLM, llmContentToText } from "@/lib/llm";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+export const runtime = "nodejs";
 
-const translationPrompt = (text: string, targetLang: string) => `
-You are a medical translation assistant.
-
-Your task is to strictly translate the following medical summary into **${targetLang}**, with **NO commentary, no extra formatting, and no additional explanations**.
-
-⚠️ Only return the translated text, nothing else.
-
-Original summary:
-"""${text}"""
-`;
+const disclaimer =
+  "For information only, not medical advice. A qualified clinician should interpret these results in your full clinical context.";
+const supportedLanguages: Record<string, string> = {
+    en: "English",
+    hi: "Hindi",
+    pa: "Punjabi",
+    es: "Spanish",
+    ar: "Arabic",
+    pt: "Portuguese",
+    fr: "French",
+};
 
 export async function POST(req: NextRequest) {
     try {
+        const { userId } = await auth();
+        if (!userId) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await req.json();
         const { text, targetLang } = body;
+        if (
+            typeof text !== "string" ||
+            !text.trim() ||
+            text.length > 50_000 ||
+            typeof targetLang !== "string" ||
+            !supportedLanguages[targetLang]
+        ) {
+            return NextResponse.json({ error: "Invalid translation request" }, { status: 400 });
+        }
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-        const result = await model.generateContent(translationPrompt(text, targetLang));
-        const response = result.response;
-        const translatedText = response.text();
+        const model = getLLM("translate");
+        const result = await model.invoke([
+            new SystemMessage(
+                "You are a careful medical translator. Translate faithfully without adding findings, diagnoses, advice, commentary, or extra formatting. Return only translated text.",
+            ),
+            new HumanMessage(
+                `Translate the following medical summary and its safety disclaimer into ${supportedLanguages[targetLang]}.\n\nMEDICAL SUMMARY:\n${text.trim()}\n\nSAFETY DISCLAIMER:\n${disclaimer}`,
+            ),
+        ]);
+        const translatedText = llmContentToText(result.content).trim();
+        if (!translatedText) {
+            throw new Error("AI provider returned an empty translation");
+        }
         
         return NextResponse.json({ translatedText }, { status: 200 });
     } catch (error) {

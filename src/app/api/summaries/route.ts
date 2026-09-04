@@ -1,67 +1,62 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { extractStructuredLabs, llmMessageText } from "@/lib/lab-extraction";
+import { getLLM } from "@/lib/llm";
+import { getEntitlements } from "@/lib/entitlements";
+import { extractReportEnrichment } from "@/lib/report-enrichment";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+});
+const metadataSchema = z.object({
+  sourceLab: z.string().trim().max(160).optional(),
+  sourceCountry: z.string().trim().max(80).optional(),
+  reportDate: isoDateSchema.optional(),
+}).optional();
+const requestSchema = z.object({ text: z.string().trim().min(1).max(200_000), metadata: metadataSchema });
 
-const strictPrompt = (text: string) => `
-You are a medical document assistant. Summarize the following medical report content into clear, structured, bullet-point format.
+const patientFriendlyPrompt = (text: string) => `
+You are a health-information assistant, not a doctor. Explain the supplied medical report in simple language. Do not diagnose, prescribe, or invent facts. When the report does not contain an answer, say so plainly.
 
-⚠️ Be VERY STRICT in extracting only useful and meaningful medical info. NO fluff.
-🩺 Focus on:
-- Patient details (if any)
-- Reason for medical assessment
-- Site/time/events
-- Consent status
-- Observers
-- Presenting complaint
-- Sources of information
-- Any clear diagnostic, procedural or treatment notes
-- Summarization & Highlighting: Provide concise summaries of complex reports. Highlight key findings, abnormalities, or values outside normal ranges.
+Structure the response as:
+1. What this report was for
+2. Main findings
+3. What the findings may mean and appropriate questions for a clinician
+4. Key takeaways
 
-📄 Use this strict format:
+End exactly with: "For information only, not medical advice. Discuss results and reference ranges with a qualified clinician."
 
-**🔹 Patient Details**
-- Name: ...
-- DOB: ...
-- Hospital #: ...
-
-**🔹 Reason for Medical Assessment**
-- ...
-
-**🔹 Timeline of Events**
-- [Date/time] - [Event detail]
-
-**🔹 Consent**
-- ...
-
-**🔹 Observers**
-- ...
-
-**🔹 Presenting Complaint**
-- ...
-
-**🔹 Source of Information**
-- ...
-
-Now, here is the report content:
-
-"${text}"
+Report content:
+"""${text}"""
 `;
 
-
 export async function POST(req: NextRequest) {
-    try {
-        const body = await req.json();
-        const { text } = body;
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-        const result = await model.generateContent(strictPrompt(text));
-        const response = await result.response;
-        const summary = response.text();
-
-        return NextResponse.json({ summary });
-    } catch (err) {
-        console.error("Summary Error:", err);
-        return NextResponse.json({ error: "Failed to generate summary" }, { status: 500 });
+  try {
+    const parsed = requestSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: "A non-empty report text is required" }, { status: 400 });
     }
+
+    const { text, metadata } = parsed.data;
+    const entitlements = await getEntitlements(userId);
+    const [summaryMessage, labs, enrichment] = await Promise.all([
+      getLLM("chat").invoke(patientFriendlyPrompt(text)),
+      extractStructuredLabs(text, metadata),
+      entitlements.medications || entitlements.education
+        ? extractReportEnrichment(text)
+        : Promise.resolve({ medications: [], education: [] }),
+    ]);
+    const summary = llmMessageText(summaryMessage).trim();
+    if (!summary) throw new Error("The model returned an empty summary");
+
+    return NextResponse.json({ summary, labs, ...enrichment });
+  } catch (err) {
+    console.error("Summary Error:", err);
+    return NextResponse.json({ error: "Failed to generate summary" }, { status: 500 });
+  }
 }

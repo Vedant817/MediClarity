@@ -1,27 +1,18 @@
-import { NextResponse } from "next/server";
-import connectDB from "@/lib/db";
-import Report from "@/models/report";
-import { auth } from '@clerk/nextjs/server'
+import { auth } from "@clerk/nextjs/server";
 
-export async function POST(req: Request) {
-    const { userId } = await auth();
-
-    if (!userId) {
-        return new NextResponse('Unauthorized', { status: 401 });
-    }
-    await connectDB();
-
-    try {
-        const { fileUrl, summary, ocr } = await req.json();
-
-        if (!fileUrl || !summary || !ocr) {
-            return NextResponse.json({ error: "Missing fields" }, { status: 400 });
-        }
-
-        const report = await Report.create({ userId, fileUrl, summary, ocr });
-        return NextResponse.json({ message: "Report saved", report });
-    } catch (err) {
-        console.error(err);
-        return NextResponse.json({ error: "Failed to save report" }, { status: 500 });
-    }
+/**
+ * Derived report data used to be accepted from the browser here. That allowed
+ * callers to persist fabricated OCR, summaries, and lab rows. All report
+ * creation now goes through the server-owned multipart ingest endpoint.
+ */
+export async function POST() {
+  const { userId } = await auth();
+  if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  return Response.json(
+    {
+      error: "This endpoint no longer accepts report data. Use /api/reports/ingest.",
+      code: "SERVER_OWNED_INGEST_REQUIRED",
+    },
+    { status: 410 },
+  );
 }
