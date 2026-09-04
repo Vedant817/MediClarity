@@ -8,6 +8,13 @@ import {
     User,
     Settings,
     CalendarCheck,
+    LineChart,
+    Pill,
+    BookOpen,
+    Stethoscope,
+    KeyRound,
+    Building2,
+    Mic2,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -16,30 +23,47 @@ const SideBar = () => {
     const pathname = usePathname();
 
     const isActive = (path: string) => {
-        return pathname === path || pathname?.startsWith(`${path}/`);
+        return path === "/dashboard" ? pathname === path : pathname === path || pathname?.startsWith(`${path}/`);
     };
 
-    const links = [
-        { href: "/dashboard", icon: FileText, label: "Dashboard" },
-        { href: "/dashboard/upload", icon: Upload, label: "Upload Reports" },
-        { href: "/dashboard/reports", icon: FileText, label: "My Reports" },
-        { href: "/dashboard/appointments", icon: CalendarCheck, label: "Appointments" },
-        { href: "/dashboard/chat", icon: MessageCircle, label: "AI Chat" },
-        { href: "/dashboard/profile", icon: User, label: "Profile" },
-        { href: "/dashboard/settings", icon: Settings, label: "Settings" },
+    const groups = [
+        { label: "Health record", links: [
+            { href: "/dashboard", icon: FileText, label: "Dashboard" },
+            { href: "/dashboard/upload", icon: Upload, label: "Upload reports" },
+            { href: "/dashboard/reports", icon: FileText, label: "Reports & sharing" },
+            { href: "/dashboard/trends", icon: LineChart, label: "Lab trends" },
+        ] },
+        { label: "Care", links: [
+            { href: "/dashboard/meds", icon: Pill, label: "Medications" },
+            { href: "/dashboard/learn", icon: BookOpen, label: "Learn" },
+            { href: "/dashboard/triage", icon: Stethoscope, label: "Care direction" },
+            { href: "/dashboard/appointments", icon: CalendarCheck, label: "Appointments" },
+            { href: "/dashboard/chat", icon: MessageCircle, label: "Record chat" },
+            { href: "/dashboard/voice", icon: Mic2, label: "Voice assistant" },
+        ] },
+        { label: "Account", links: [
+            { href: "/dashboard/api-keys", icon: KeyRound, label: "Lab API" },
+            { href: "/dashboard/lab-brand", icon: Building2, label: "Lab branding" },
+            { href: "/dashboard/profile", icon: User, label: "Profile" },
+            { href: "/dashboard/settings", icon: Settings, label: "Settings" },
+        ] },
     ];
+    const links = groups.flatMap((group) => group.links);
+    const mobileLinks = links.filter((link) => ["/dashboard", "/dashboard/upload", "/dashboard/reports", "/dashboard/trends", "/dashboard/voice"].includes(link.href));
 
     return (
-        <div className="w-64 border-r bg-white">
+        <>
+        <aside className="hidden w-64 shrink-0 border-r bg-white md:block">
             <div className="flex h-16 items-center border-b px-4">
                 <Link href="/" className="flex items-center gap-2">
                     <Brain className="h-6 w-6 text-teal-600" />
                     <span className="text-xl font-bold">MediClarity</span>
                 </Link>
             </div>
-            <nav className="p-4">
-                <div className="space-y-1">
-                    {links.map((link) => (
+            <nav className="space-y-5 p-4">
+                {groups.map((group) => <div key={group.label}>
+                    <p className="mb-2 px-3 font-mono text-[10px] uppercase tracking-wider text-slate-400">{group.label}</p>
+                    <div className="space-y-1">{group.links.map((link) => (
                         <Link
                             key={link.href}
                             href={link.href}
@@ -51,10 +75,14 @@ const SideBar = () => {
                             <link.icon className="h-4 w-4" />
                             {link.label}
                         </Link>
-                    ))}
-                </div>
+                    ))}</div>
+                </div>)}
             </nav>
-        </div>
+        </aside>
+        <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t bg-white md:hidden" aria-label="Dashboard navigation">
+            {mobileLinks.map((link) => <Link key={link.href} href={link.href} className={`flex min-w-0 flex-col items-center gap-1 px-1 py-2 text-[10px] ${isActive(link.href) ? "text-teal-700" : "text-slate-500"}`}><link.icon className="h-4 w-4" /><span className="truncate">{link.label.split(" ")[0]}</span></Link>)}
+        </nav>
+        </>
     );
 };
 

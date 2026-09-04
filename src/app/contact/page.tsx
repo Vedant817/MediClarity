@@ -1,0 +1,6 @@
+import Link from "next/link";
+
+export default function ContactPage() {
+  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim();
+  return <main className="min-h-screen bg-[#102321] px-5 py-16 text-[#f7f3e9]"><div className="mx-auto max-w-2xl border border-[#f7f3e9]/20 p-7 md:p-10"><Link className="font-mono text-sm text-[#9fc8bf] underline" href="/">← MediClarity</Link><p className="mt-10 font-mono text-xs uppercase tracking-[0.2em] text-[#9fc8bf]">Contact</p><h1 className="mt-3 text-4xl font-semibold">Talk about a report workflow.</h1><p className="mt-5 leading-7 text-[#c7d8d4]">For account help, a lab pilot, security questions, or deletion requests, contact the support address configured for this deployment. Do not send medical records by email.</p>{supportEmail ? <a className="mt-8 inline-flex bg-[#ff8f7a] px-5 py-3 font-semibold text-[#102321]" href={`mailto:${supportEmail}`}>{supportEmail}</a> : <p className="mt-8 border border-amber-300/40 bg-amber-100/10 p-4 text-sm text-amber-100">The deployment owner has not configured a public support address yet.</p>}<p className="mt-8 text-sm text-[#9fc8bf]">For urgent symptoms, contact local emergency services. MediClarity does not provide emergency support.</p></div></main>;
+}

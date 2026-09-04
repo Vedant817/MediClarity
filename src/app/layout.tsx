@@ -20,8 +20,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MediClarity - Understand Your Medical Reports",
-  description: "Upload any medical report and get instant, easy-to-understand insights powered by advanced medical AI models.",
+  title: "MediClarity - Lab PDFs to Comparable Health Data",
+  description: "Turn lab PDFs and photos into structured, source-linked results you can understand, compare, and share.",
 };
 
 export default function RootLayout({
