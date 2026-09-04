@@ -1,0 +1,119 @@
+MediClarity Product Audit and Implementation Backlog
+
+==================================================
+1) Current Feature Status (Corrected)
+==================================================
+
+Implemented:
+- [x] Interactive Q&A on uploaded report context
+- [x] AI Summarization of uploaded medical reports
+- [x] Translation of generated summaries
+- [x] Appointment scheduling (form flow + AI scheduler)
+
+Partially Implemented:
+- [~] Patient portal basics (reports list + appointments timeline exist, but no full health dashboard)
+- [~] Reminder/follow-up appointment APIs exist but are not production-ready
+
+Missing:
+- [ ] Symptom checker
+- [ ] Medication management (tracking, reminders, interaction checks)
+- [ ] E-prescription integration
+- [ ] Personalized educational content
+- [ ] Telehealth integration (text/audio/video consults)
+- [ ] Wearables integration
+- [ ] Predictive analytics
+- [ ] Emergency features (SOS, nearby urgent care/pharmacy)
+- [ ] Multi-source report unification and lab normalization
+- [ ] Temporal trend analysis dashboard
+- [ ] EHR interoperability APIs (FHIR/HL7/vendor integrations)
+- [ ] Granular access controls and audit-grade permissions
+
+==================================================
+2) Critical Quality Fixes Required First (P0)
+==================================================
+
+- Fix API authorization model:
+  Derive user identity from Clerk auth/session on server side for all sensitive endpoints.
+  Do not trust userId sent via query/body for protected data access.
+
+- Fix runtime incompatibility:
+  Remove Edge runtime where MongoDB/Mongoose is used.
+
+- Fix appointment model integrity:
+  Add and enforce followUpSent (or equivalent) in schema to prevent duplicate follow-up notifications.
+
+- Unify scheduling time handling:
+  Standardize date/time format across UI, DB, and availability APIs.
+  Remove stale hard-coded 2025 mock availability.
+
+- Improve AI safety/reliability prompts:
+  Remove instructions that force answering without enough context.
+  Add uncertainty handling and safe escalation language.
+
+- Replace in-memory chat session state:
+  Persist conversation/session state in DB or Redis.
+
+- Fix broken/placeholder UI paths:
+  Complete profile page and implement/remove settings route link.
+
+- Quality gates:
+  Install dependencies, restore lint pipeline, add test coverage, and run checks in CI.
+
+==================================================
+3) Information Required to Continue (Needed Inputs)
+==================================================
+
+Product and compliance:
+- Target compliance scope (HIPAA only, HIPAA + SOC2 controls, regional requirements)
+- Allowed/forbidden marketing claims (accuracy %, certifications, medical model claims)
+- Clinical risk level and disclaimer policy
+
+Feature definitions:
+- Symptom checker scope (triage only vs condition suggestions)
+- Medication feature scope (manual entry vs OCR extraction vs pharmacy feed)
+- E-prescription scope (view only vs generation vs refill workflows)
+- Telehealth scope (async chat vs audio/video, provider licensing geography)
+- Emergency feature scope (US only vs multi-country, EMS integration expectations)
+
+Data and integrations:
+- EHR targets (FHIR/HL7, Epic/Cerner/custom, auth model)
+- Wearables providers (Apple Health, Google Fit, Fitbit, Garmin, etc.)
+- Drug interaction and medication knowledge source/API choice
+- Provider directory source of truth and scheduling source of truth
+
+AI and analytics governance:
+- Approved AI model policy and fallback strategy
+- Human review requirements for high-risk outputs
+- Predictive analytics acceptance criteria and validation standard
+
+Delivery and prioritization:
+- P0/P1/P2 feature priority order
+- MVP deadline and release milestones
+- Success metrics (activation, booking conversion, retention, clinical safety KPIs)
+
+==================================================
+4) Recommended Execution Plan
+==================================================
+
+Phase 1: Platform Hardening (first)
+- Authz fixes, runtime fixes, schema fixes, stable scheduling data model
+- Prompt safety updates, chat session persistence
+- Lint/test/CI baseline and production-readiness checks
+
+Phase 2: Patient Portal Foundation
+- Complete profile/settings
+- Unified health dashboard (reports, timeline, meds, visits, summaries)
+- Proper reminders and follow-up flows with idempotency and auditability
+
+Phase 3: New Clinical Features
+- Symptom checker
+- Medication management and interactions
+- E-prescription support
+- Telehealth
+- Personalized education
+
+Phase 4: Advanced Integrations and Intelligence
+- Wearables
+- EHR interoperability
+- Temporal analytics + predictive models (with governance)
+- Emergency pathways
