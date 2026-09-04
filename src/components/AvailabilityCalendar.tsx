@@ -2,14 +2,22 @@
 import { useState, useEffect } from 'react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { getAvailability } from '@/lib/availability';
+import type { ProviderAvailability } from '@/lib/availability';
 
 type ValuePiece = Date | null;
 type Value = ValuePiece | [ValuePiece, ValuePiece];
 
+function toLocalIsoDate(date: Date): string {
+    return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0'),
+    ].join('-');
+}
+
 export default function AvailabilityCalendar({ providerId }: { providerId: string }) {
     const [date, setDate] = useState<Value>(new Date());
-    const [availability, setAvailability] = useState<Record<string, any>>({});
+    const [availability, setAvailability] = useState<ProviderAvailability>({});
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -18,9 +26,11 @@ export default function AvailabilityCalendar({ providerId }: { providerId: strin
 
             setLoading(true);
             try {
-                const dateStr = date instanceof Date ? date.toISOString().split('T')[0] : '';
-                const data = await getAvailability(providerId, dateStr);
-                setAvailability(data);
+                const dateStr = date instanceof Date ? toLocalIsoDate(date) : '';
+                const response = await fetch(`/api/availability?providerId=${encodeURIComponent(providerId)}&date=${dateStr}`);
+                if (!response.ok) throw new Error('Failed to load availability');
+                const data = await response.json();
+                setAvailability(data.availability);
             } catch (error) {
                 console.error('Error fetching availability:', error);
             } finally {
@@ -34,7 +44,7 @@ export default function AvailabilityCalendar({ providerId }: { providerId: strin
     const tileContent = ({ date, view }: { date: Date; view: string }) => {
         if (view !== 'month') return null;
 
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = toLocalIsoDate(date);
         const dayAvailability = availability[dateStr];
 
         if (!dayAvailability) return null;
@@ -76,10 +86,10 @@ export default function AvailabilityCalendar({ providerId }: { providerId: strin
     );
 }
 
-function TimeSlotList({ date, availability }: { date: Value, availability: any }) {
+function TimeSlotList({ date, availability }: { date: Value, availability: ProviderAvailability }) {
     if (!date || !(date instanceof Date)) return null;
 
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = toLocalIsoDate(date);
     const dayAvailability = availability[dateStr];
 
     if (!dayAvailability?.slots) {
@@ -92,12 +102,12 @@ function TimeSlotList({ date, availability }: { date: Value, availability: any }
                 Available times for {date.toLocaleDateString()}
             </h3>
             <div className="grid grid-cols-2 gap-2">
-                {dayAvailability.timeSlots.map((slot: any) => (
+                {dayAvailability.timeSlots.filter((slot) => slot.available).map((slot) => (
                     <button
                         key={slot.time}
                         className="border rounded p-2 hover:bg-blue-50"
                     >
-                        {slot.time}
+                        {slot.label}
                     </button>
                 ))}
             </div>

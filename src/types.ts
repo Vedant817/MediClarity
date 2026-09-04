@@ -43,7 +43,7 @@ export interface BookingData {
     date?: string;
     time?: string;
     reason?: string;
-    type?: string;
+    appointmentType?: string;
 }
 
 export interface Doctor {

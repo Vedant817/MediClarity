@@ -20,16 +20,14 @@ const AIChatPage = () => {
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
     const [isThinking, setIsThinking] = useState(false);
-    const [summary, setSummary] = useState<string>("");
-    const [ocr, setOcr] = useState<string>("");
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [isSessionInitialized, setIsSessionInitialized] = useState(false);
 
     const sessionIdRef = useRef<string>("");
     const bottomRef = useRef<HTMLDivElement>(null);
 
-    const initializeSession = useCallback(async () => {
-        if (!user || isSessionInitialized) return;
+    const initializeSession = useCallback(async (reportSummary: string, reportOcr: string) => {
+        if (!user) return;
 
         setIsThinking(true);
         try {
@@ -38,48 +36,56 @@ const AIChatPage = () => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     sessionId: sessionIdRef.current,
-                    userId: user.id,
-                    summary,
-                    ocr,
+                    summary: reportSummary,
+                    ocr: reportOcr,
                 }),
             });
 
             if (!res.ok) throw new Error("Failed to initialize session");
+            const data = await res.json();
+            if (Array.isArray(data.messages)) {
+                setMessages(data.messages.filter((message: Message) =>
+                    message.role === "user" || message.role === "assistant"
+                ));
+            }
             setIsSessionInitialized(true);
         } catch (error) {
             console.error("Session initialization error:", error);
         } finally {
             setIsThinking(false);
         }
-    }, [user, isSessionInitialized, summary, ocr]);
+    }, [user]);
 
     const fetchSummaryAndOcr = useCallback(async () => {
         if (!user) return;
 
         try {
-            const res = await fetch(`/api/chatbot/user-data?userId=${user.id}`);
+            const res = await fetch("/api/chatbot/user-data");
+            let reportSummary = "";
+            let reportOcr = "";
             if (!res.ok) {
                 if (res.status !== 404) console.error("Error fetching user data:", res.statusText);
-                setSummary("");
-                setOcr("");
             } else {
                 const data = await res.json();
-                setSummary(data.summary || "");
-                setOcr(data.ocr || "");
+                reportSummary = data.summary || "";
+                reportOcr = data.ocr || "";
             }
+            await initializeSession(reportSummary, reportOcr);
         } catch (error) {
             console.error("Fetch summary/OCR failed:", error);
-            setSummary("");
-            setOcr("");
         } finally {
             setIsLoadingData(false);
-            initializeSession();
         }
     }, [user, initializeSession]);
 
     useEffect(() => {
         if (user) {
-            sessionIdRef.current = uuidv4();
+            const storageKey = "mediclarity-records-chat-session";
+            const existingSessionId = window.localStorage.getItem(storageKey);
+            sessionIdRef.current = existingSessionId || uuidv4();
+            if (!existingSessionId) {
+                window.localStorage.setItem(storageKey, sessionIdRef.current);
+            }
             fetchSummaryAndOcr();
         }
 
@@ -103,7 +109,6 @@ const AIChatPage = () => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     sessionId: sessionIdRef.current,
-                    userId: user.id,
                     userMessage: input,
                 }),
             });

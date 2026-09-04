@@ -10,11 +10,14 @@ import { BookingData, Doctor } from '@/types';
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 
-function extractJsonData<T>(message: string): T | null {
-    const jsonMatch = message.match(/\{[\s\S]*?\}/);
+function extractTaggedJson<T>(message: string, tag: 'SUGGESTED_DOCTORS' | 'BOOKING_READY'): T | null {
+    const pattern = tag === 'SUGGESTED_DOCTORS'
+        ? /SUGGESTED_DOCTORS\s*(\[[\s\S]*?\])/m
+        : /BOOKING_READY\s*(\{[\s\S]*?\})/m;
+    const jsonMatch = message.match(pattern);
     if (jsonMatch) {
         try {
-            return JSON.parse(jsonMatch[0]) as T;
+            return JSON.parse(jsonMatch[1]) as T;
         } catch (e) {
             console.error('Failed to parse JSON data:', e);
         }
@@ -32,6 +35,7 @@ export default function ConversationalScheduler() {
     const [bookingData, setBookingData] = useState<BookingData | null>(null);
     const [suggestedDoctors, setSuggestedDoctors] = useState<Doctor[]>([]);
     const [conversationId, setConversationId] = useState<string | null>(null);
+    const [providerCatalog, setProviderCatalog] = useState<Array<{ id: string; name: string; specialty: string }>>([]);
     const abortControllerRef = useRef<AbortController | null>(null);
     const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -47,7 +51,7 @@ export default function ConversationalScheduler() {
             if (!user?.id) return;
 
             try {
-                const response = await fetch(`/api/appointment/scheduler/history?userId=${user.id}`);
+                const response = await fetch('/api/appointment/scheduler/history');
                 const data = await response.json();
 
                 if (data.messages && data.messages.length > 0) {
@@ -68,7 +72,22 @@ export default function ConversationalScheduler() {
         loadConversationHistory();
     }, [user?.id]);
 
-    const clearChat = () => {
+    useEffect(() => {
+        if (!user?.id) return;
+        fetch('/api/providers')
+            .then((response) => response.ok ? response.json() : Promise.reject(new Error('Providers unavailable')))
+            .then((data: { providers: Array<{ id: string; name: string; specialty: string }> }) => setProviderCatalog(data.providers))
+            .catch(() => setProviderCatalog([]));
+    }, [user?.id]);
+
+    const clearChat = async () => {
+        if (conversationId) {
+            const response = await fetch(`/api/appointment/scheduler/history?conversationId=${encodeURIComponent(conversationId)}`, { method: 'DELETE' });
+            if (!response.ok) {
+                toast.error('Saved conversation could not be cleared');
+                return;
+            }
+        }
         setMessages([]);
         setIsBookingReady(false);
         setBookingData(null);
@@ -103,14 +122,13 @@ export default function ConversationalScheduler() {
 
             abortControllerRef.current = new AbortController();
 
-            const response = await fetch('/api/appointment/ai', {
+            const response = await fetch('/api/appointment/scheduler', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
                     messages: [{ role: 'user', content: contentToSubmit }],
-                    userId: user.id,
                     conversationId: conversationId
                 }),
                 signal: abortControllerRef.current.signal,
@@ -155,15 +173,17 @@ export default function ConversationalScheduler() {
             const finalContent = assistantMessage.content;
 
             if (finalContent.includes('SUGGESTED_DOCTORS')) {
-                const doctors = extractJsonData<Doctor[]>(finalContent);
-                if (doctors) {
-                    setSuggestedDoctors(doctors);
+                const doctors = extractTaggedJson<Doctor[]>(finalContent, 'SUGGESTED_DOCTORS');
+                if (Array.isArray(doctors)) {
+                    setSuggestedDoctors(doctors.filter((doctor) => providerCatalog.some((provider) =>
+                        provider.id === doctor.id && provider.name === doctor.name && provider.specialty === doctor.specialty)));
                 }
             }
 
             if (finalContent.includes('BOOKING_READY')) {
-                const bookingInfo = extractJsonData<BookingData>(finalContent);
-                if (bookingInfo) {
+                const bookingInfo = extractTaggedJson<BookingData>(finalContent, 'BOOKING_READY');
+                const provider = bookingInfo && providerCatalog.find((entry) => entry.id === bookingInfo.providerId && entry.name === bookingInfo.providerName);
+                if (bookingInfo && provider) {
                     setBookingData(bookingInfo);
                     setIsBookingReady(true);
                 }
@@ -193,7 +213,7 @@ export default function ConversationalScheduler() {
         } finally {
             setIsLoading(false);
         }
-    }, [user, conversationId, input]);
+    }, [user, conversationId, input, providerCatalog]);
 
     const stopGeneration = () => {
         if (abortControllerRef.current) {
@@ -223,13 +243,13 @@ export default function ConversationalScheduler() {
     }, [messages, handleSubmit]);
 
     const handleFinalBooking = async () => {
-        if (user && bookingData) {
+        if (user && bookingData?.providerId && bookingData.date && bookingData.time && bookingData.reason && bookingData.appointmentType) {
             const formData = new FormData();
-            formData.append('patientId', user.id);
-            formData.append('providerId', bookingData.providerId || '');
-            formData.append('date', bookingData.date || '');
-            formData.append('time', bookingData.time || '');
-            formData.append('reason', bookingData.reason || 'Follow-up');
+            formData.append('providerId', bookingData.providerId);
+            formData.append('date', bookingData.date);
+            formData.append('time', bookingData.time);
+            formData.append('reason', bookingData.reason);
+            formData.append('appointmentType', bookingData.appointmentType);
 
             const result = await createAppointment(null, formData);
 
@@ -239,7 +259,7 @@ export default function ConversationalScheduler() {
             } else {
                 toast.error(`Failed to schedule appointment: ${result.error}`);
             }
-        }
+        } else toast.error('The suggested booking is incomplete. Ask the scheduler for provider, type, date, time, and reason.');
     };
 
     return (

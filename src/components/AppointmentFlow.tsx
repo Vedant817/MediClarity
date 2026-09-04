@@ -1,9 +1,9 @@
 'use client';
 import { useUser } from '@clerk/nextjs';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { toast } from 'sonner';
-import { appointmentTypes, timeSlots } from '@/lib/data';
+import { appointmentTypes } from '@/lib/data';
 import { createAppointment } from '@/actions/appointment';
 import { useAppointmentStore } from '@/store/appointment';
 
@@ -29,6 +29,32 @@ export default function EnhancedAppointmentFlow({ providers }: { providers: Prov
         setSelectedProvider,
         reset,
     } = useAppointmentStore();
+    const [availableTimes, setAvailableTimes] = useState<Array<{ value: string; label: string }>>([]);
+    const [availabilityLoading, setAvailabilityLoading] = useState(false);
+
+    useEffect(() => {
+        if (!selectedProvider || !selectedDate) {
+            setAvailableTimes([]);
+            return;
+        }
+        const controller = new AbortController();
+        setAvailabilityLoading(true);
+        setSelectedTime('');
+        fetch(`/api/availability?providerId=${encodeURIComponent(selectedProvider)}&date=${selectedDate}`, { signal: controller.signal })
+            .then(async (response) => {
+                if (!response.ok) throw new Error('Availability could not be loaded');
+                return response.json() as Promise<{ availability: Record<string, { timeSlots: Array<{ time: string; label: string; available: boolean }> }> }>;
+            })
+            .then((data) => setAvailableTimes((data.availability[selectedDate]?.timeSlots ?? []).filter((slot) => slot.available).map((slot) => ({ value: slot.time, label: slot.label }))))
+            .catch((error: Error) => {
+                if (error.name !== 'AbortError') {
+                    setAvailableTimes([]);
+                    toast.error(error.message);
+                }
+            })
+            .finally(() => setAvailabilityLoading(false));
+        return () => controller.abort();
+    }, [selectedDate, selectedProvider, setSelectedTime]);
 
     useEffect(() => {
         if (state?.success) {
@@ -73,21 +99,6 @@ export default function EnhancedAppointmentFlow({ providers }: { providers: Prov
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium mb-1">Time</label>
-                        <select
-                            className="w-full border rounded p-2"
-                            value={selectedTime}
-                            onChange={(e) => setSelectedTime(e.target.value)}
-                        >
-                            <option value="">Select a time</option>
-                            {timeSlots.map(slot => (
-                                <option key={slot.value} value={slot.value}>
-                                    {slot.label}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                    <div>
                         <label className="block text-sm font-medium mb-1">Physician</label>
                         <select
                             className="w-full border rounded p-2"
@@ -102,6 +113,22 @@ export default function EnhancedAppointmentFlow({ providers }: { providers: Prov
                             ))}
                         </select>
                     </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Available time</label>
+                        <select
+                            className="w-full border rounded p-2"
+                            value={selectedTime}
+                            onChange={(e) => setSelectedTime(e.target.value)}
+                            disabled={!selectedProvider || !selectedDate || availabilityLoading}
+                        >
+                            <option value="">{availabilityLoading ? 'Loading availability…' : availableTimes.length ? 'Select a time' : 'No configured slots'}</option>
+                            {availableTimes.map(slot => (
+                                <option key={slot.value} value={slot.value}>
+                                    {slot.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             ),
         },
@@ -111,7 +138,6 @@ export default function EnhancedAppointmentFlow({ providers }: { providers: Prov
                 <div>
                     <form action={formAction}>
                         <input type="hidden" name="appointmentType" value={selectedType} />
-                        <input type="hidden" name="patientId" value={user?.id} />
                         <input type="hidden" name="providerId" value={selectedProvider} />
                         <input type="hidden" name="date" value={selectedDate} />
                         <input type="hidden" name="time" value={selectedTime} />
@@ -125,14 +151,7 @@ export default function EnhancedAppointmentFlow({ providers }: { providers: Prov
                                     rows={4}
                                 />
                             </div>
-                            <div>
-                                <p className="font-medium mb-2">Pre-visit requirements:</p>
-                                <ul className="list-disc list-inside space-y-2">
-                                    <li>Fasting (8 hours)</li>
-                                    <li>Drink plenty of water</li>
-                                    <li>Bring current medications</li>
-                                </ul>
-                            </div>
+                            <p className="text-sm text-gray-600">Follow only preparation instructions supplied directly by the selected provider.</p>
                             <SubmitButton />
                         </div>
                     </form>

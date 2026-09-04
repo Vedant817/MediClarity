@@ -1,155 +1,101 @@
-type TimeSlot = {
-  time: string;
-  available: boolean;
-};
+import connectDB from "@/lib/db";
+import { assertCanonicalAppointmentDate, normalizeAppointmentTime } from "@/lib/appointment-slot";
+import Appointment from "@/models/appointment";
+import Provider from "@/models/provider";
 
-type AvailabilityData = {
-  slots: number;
-  timeSlots: TimeSlot[];
-};
+export type TimeSlotAvailability = { time: string; label: string; available: boolean };
+export type AvailabilityData = { slots: number; timeSlots: TimeSlotAvailability[] };
+export type ProviderAvailability = Record<string, AvailabilityData>;
 
-type ProviderAvailability = Record<string, AvailabilityData>;
+function slotLabel(value: string): string {
+  const [hours, minutes] = value.split(":").map(Number);
+  return `${hours % 12 || 12}:${String(minutes).padStart(2, "0")} ${hours < 12 ? "AM" : "PM"}`;
+}
 
-const providerAvailabilityMock: Record<string, ProviderAvailability> = {
-  'dr-smith': {
-    '2025-05-05': {
-      slots: 4,
-      timeSlots: [
-        { time: '09:00 AM', available: true },
-        { time: '10:00 AM', available: true },
-        { time: '11:00 AM', available: true },
-        { time: '02:00 PM', available: true },
-      ]
-    },
-    '2025-05-06': {
-      slots: 3,
-      timeSlots: [
-        { time: '09:00 AM', available: true },
-        { time: '10:00 AM', available: true },
-        { time: '03:00 PM', available: true },
-      ]
-    },
-    '2025-05-07': {
-      slots: 2,
-      timeSlots: [
-        { time: '01:00 PM', available: true },
-        { time: '02:00 PM', available: true },
-      ]
-    },
-  },
-  'dr-johnson': {
-    '2025-05-05': {
-      slots: 3,
-      timeSlots: [
-        { time: '09:30 AM', available: true },
-        { time: '10:30 AM', available: true },
-        { time: '11:30 AM', available: true },
-      ]
-    },
-    '2025-05-06': {
-      slots: 4,
-      timeSlots: [
-        { time: '08:30 AM', available: true },
-        { time: '09:30 AM', available: true },
-        { time: '01:30 PM', available: true },
-        { time: '02:30 PM', available: true },
-      ]
-    },
-    '2025-05-08': {
-      slots: 2,
-      timeSlots: [
-        { time: '01:30 PM', available: true },
-        { time: '02:30 PM', available: true },
-      ]
-    },
-  },
-  'dr-williams': {
-    '2025-05-05': {
-      slots: 5,
-      timeSlots: [
-        { time: '08:00 AM', available: true },
-        { time: '09:00 AM', available: true },
-        { time: '10:00 AM', available: true },
-        { time: '02:00 PM', available: true },
-        { time: '03:00 PM', available: true },
-      ]
-    },
-    '2025-05-07': {
-      slots: 3,
-      timeSlots: [
-        { time: '08:00 AM', available: true },
-        { time: '09:00 AM', available: true },
-        { time: '04:00 PM', available: true },
-      ]
-    },
-    '2025-05-09': {
-      slots: 2,
-      timeSlots: [
-        { time: '02:00 PM', available: true },
-        { time: '03:00 PM', available: true },
-      ]
-    },
-  }
-};
+function availabilityForBookedTimes(configuredSlots: string[], bookedTimes: string[]): AvailabilityData {
+  // Treat legacy `09:00 AM` and canonical `09:00` values as the same slot.
+  const booked = new Set(bookedTimes.map(normalizeAppointmentTime));
+  const slots = configuredSlots.map(normalizeAppointmentTime).map((time) => ({
+    time,
+    label: slotLabel(time),
+    available: !booked.has(time),
+  }));
+  return { slots: slots.filter((slot) => slot.available).length, timeSlots: slots };
+}
 
 export async function getAvailability(providerId: string, date: string): Promise<ProviderAvailability> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-
-  if (providerAvailabilityMock[providerId]) {
-    if (providerAvailabilityMock[providerId][date]) {
-      return { [date]: providerAvailabilityMock[providerId][date] };
-    }
-    
-    return { 
-      [date]: { 
-        slots: 0, 
-        timeSlots: [] 
-      } 
-    };
-  }
-
-  return {};
+  assertCanonicalAppointmentDate(date);
+  await connectDB();
+  const provider = await Provider.findOne({ id: providerId, acceptingNewPatients: true })
+    .select({ weeklyAvailability: 1 })
+    .lean<{ weeklyAvailability?: Array<{ weekday: number; slots: string[] }> }>();
+  if (!provider) throw new Error("Provider not found or not accepting appointments");
+  const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+  const configuredSlots = provider.weeklyAvailability?.find((entry) => entry.weekday === weekday)?.slots ?? [];
+  const bookedAppointments = await Appointment.find({ providerId, date, status: "scheduled" })
+    .select({ time: 1, _id: 0 })
+    .lean<Array<{ time: string }>>();
+  return { [date]: availabilityForBookedTimes(configuredSlots, bookedAppointments.map((appointment) => appointment.time)) };
 }
 
-export async function getMonthAvailability(providerId: string, year: number, month: number): Promise<ProviderAvailability> {
-  await new Promise(resolve => setTimeout(resolve, 500));
-
-  if (providerAvailabilityMock[providerId]) {
-    const result: ProviderAvailability = {};
-    
-    for (const dateStr in providerAvailabilityMock[providerId]) {
-      const date = new Date(dateStr);
-      
-      if (date.getFullYear() === year && date.getMonth() === month - 1) {
-        result[dateStr] = providerAvailabilityMock[providerId][dateStr];
-      }
-    }
-    
-    return result;
+export async function getAvailabilityWindow(providerId: string, dates: string[]): Promise<ProviderAvailability> {
+  if (dates.length === 0) return {};
+  dates.forEach(assertCanonicalAppointmentDate);
+  await connectDB();
+  const provider = await Provider.findOne({ id: providerId, acceptingNewPatients: true })
+    .select({ weeklyAvailability: 1 })
+    .lean<{ weeklyAvailability?: Array<{ weekday: number; slots: string[] }> }>();
+  if (!provider) throw new Error("Provider not found or not accepting appointments");
+  const bookedAppointments = await Appointment.find({ providerId, date: { $in: dates }, status: "scheduled" })
+    .select({ date: 1, time: 1, _id: 0 })
+    .lean<Array<{ date: string; time: string }>>();
+  const bookedByDate = new Map<string, string[]>();
+  for (const appointment of bookedAppointments) {
+    bookedByDate.set(appointment.date, [...(bookedByDate.get(appointment.date) ?? []), appointment.time]);
   }
-
-  return {};
+  return Object.fromEntries(dates.map((date) => {
+    const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+    const configuredSlots = provider.weeklyAvailability?.find((entry) => entry.weekday === weekday)?.slots ?? [];
+    return [date, availabilityForBookedTimes(configuredSlots, bookedByDate.get(date) ?? [])];
+  }));
 }
 
-export async function bookAppointment(providerId: string, date: string, time: string): Promise<{ success: boolean, message?: string }> {
-  await new Promise(resolve => setTimeout(resolve, 800));
+export async function getMonthAvailability(
+  providerId: string,
+  year: number,
+  month: number,
+): Promise<ProviderAvailability> {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error("A valid year and month are required");
+  }
+  await connectDB();
+  const provider = await Provider.findOne({ id: providerId, acceptingNewPatients: true })
+    .select({ weeklyAvailability: 1 })
+    .lean<{ weeklyAvailability?: Array<{ weekday: number; slots: string[] }> }>();
+  if (!provider) throw new Error("Provider not found or not accepting appointments");
+  const prefix = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}`;
+  const next = new Date(Date.UTC(year, month, 1));
+  const nextMonth = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const bookedAppointments = await Appointment.find({
+    providerId,
+    date: { $gte: `${prefix}-01`, $lt: nextMonth },
+    status: "scheduled",
+  }).select({ date: 1, time: 1, _id: 0 }).lean<Array<{ date: string; time: string }>>();
 
-  if (!providerAvailabilityMock[providerId] || !providerAvailabilityMock[providerId][date]) {
-    return { success: false, message: 'No availability for this provider on the selected date' };
+  const bookedByDate = new Map<string, string[]>();
+  for (const appointment of bookedAppointments) {
+    const times = bookedByDate.get(appointment.date) ?? [];
+    times.push(appointment.time);
+    bookedByDate.set(appointment.date, times);
   }
 
-  const timeSlot = providerAvailabilityMock[providerId][date].timeSlots.find(slot => slot.time === time);
-  
-  if (!timeSlot) {
-    return { success: false, message: 'Selected time slot not found' };
+  const result: ProviderAvailability = {};
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = `${prefix}-${String(day).padStart(2, "0")}`;
+    const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+    const configuredSlots = provider.weeklyAvailability?.find((entry) => entry.weekday === weekday)?.slots ?? [];
+    result[date] = availabilityForBookedTimes(configuredSlots, bookedByDate.get(date) ?? []);
   }
-
-  if (!timeSlot.available) {
-    return { success: false, message: 'This time slot is no longer available' };
-  }
-
-  timeSlot.available = false;
-  providerAvailabilityMock[providerId][date].slots -= 1;
-
-  return { success: true, message: 'Appointment booked successfully' };
+  return result;
 }
