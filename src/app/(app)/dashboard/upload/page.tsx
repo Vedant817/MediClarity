@@ -4,7 +4,6 @@ import { Upload, File, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Markdown from 'react-markdown'
@@ -25,6 +24,8 @@ const languageOptions = [
     { code: 'hi', label: 'Hindi' },
     { code: 'pa', label: 'Punjabi' },
     { code: 'es', label: 'Spanish' },
+    { code: 'ar', label: 'Arabic' },
+    { code: 'pt', label: 'Portuguese' },
     { code: 'fr', label: 'French' },
 ];
 
@@ -33,13 +34,15 @@ export default function UploadReportPage() {
     const [fileUrl, setFileUrl] = useState("");
     const [statusMessage, setStatusMessage] = useState('');
     const [uploading, setUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadStatus, setUploadStatus] = useState<string | null>(null);
     const [ocrResult, setOcrResult] = useState<string | null>(null);
     const [summary, setSummary] = useState<string | null>(null);
     const [showChat, setShowChat] = useState(false);
     const [selectedLang, setSelectedLang] = useState('en');
     const [translatedSummary, setTranslatedSummary] = useState('');
+    const [sourceLab, setSourceLab] = useState('');
+    const [sourceCountry, setSourceCountry] = useState('');
+    const [reportDate, setReportDate] = useState('');
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) return;
@@ -48,20 +51,9 @@ export default function UploadReportPage() {
         setFileUrl("");
         setUploadStatus(null);
         setOcrResult(null);
-    };
-
-    const simulateProgress = () => {
-        setUploadProgress(0);
-        const interval = setInterval(() => {
-            setUploadProgress((prev) => {
-                if (prev >= 95) {
-                    clearInterval(interval);
-                    return 95;
-                }
-                return prev + 5;
-            });
-        }, 100);
-        return interval;
+        setSummary(null);
+        setTranslatedSummary('');
+        setShowChat(false);
     };
 
     const handleUpload = async () => {
@@ -75,94 +67,42 @@ export default function UploadReportPage() {
         try {
             setUploading(true);
             setUploadStatus(null);
-            const progressInterval = simulateProgress();
 
             const formData = new FormData();
             formData.append("file", file);
+            if (sourceLab.trim()) formData.append("sourceLab", sourceLab.trim());
+            if (sourceCountry.trim()) formData.append("sourceCountry", sourceCountry.trim());
+            if (reportDate) formData.append("reportDate", reportDate);
 
-            setStatusMessage("Uploading...");
-            const response = await fetch("/api/upload", {
+            setStatusMessage("Uploading, reading, and structuring your report…");
+            const response = await fetch("/api/reports/ingest", {
                 method: "POST",
                 body: formData,
             });
 
-            clearInterval(progressInterval);
-
             if (!response.ok) {
-                throw new Error("Upload failed");
+                const failure = await response.json().catch(() => ({}));
+                throw new Error(response.status === 402 ? "Free plan limit reached. Compare plans to upload another report." : failure.error || "Report processing failed");
             }
 
             const data = await response.json();
-
-            if (data.message === "success") {
-                setFileUrl(data.imgUrl);
-                setUploadProgress(100);
-                setUploadStatus("success");
-
-                toast.success("Upload successful", {
-                    description: "Your report has been uploaded successfully.",
-                });
-
-                setStatusMessage("Extracting text from document...");
-                const ocrResponse = await fetch("/api/ocr", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ documentUrl: data.imgUrl }),
-                });
-
-                const ocrData = await ocrResponse.json();
-
-                if (ocrData && ocrData.extractedText) {
-                    const fullText = ocrData.extractedText.map((page: {text: string}) => page.text).join("\n\n");
-                    setOcrResult(fullText);
-
-                    toast.success("OCR extraction successful", {
-                        description: "Text has been successfully extracted from the document.",
-                    });
-
-                    setStatusMessage("Summarizing extracted text...");
-                    const summaryResponse = await fetch("/api/summaries", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ text: fullText }),
-                    });
-
-                    const summaryData = await summaryResponse.json();
-
-                    if (summaryData.summary) {
-                        setSummary(summaryData.summary);
-                        toast.success("Summary generated successfully", {
-                            description: "The summary has been generated from the extracted text.",
-                        });
-
-                        await fetch('/api/reports/save', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ fileUrl: data.imgUrl, summary: summaryData.summary, ocr: fullText }),
-                        });
-                    } else {
-                        toast.error("Summary failed", {
-                            description: "Could not generate summary from extracted text.",
-                        });
-                    }
-                } else {
-                    toast.error("OCR failed", {
-                        description: "Could not extract text from the uploaded file.",
-                    });
-                }
-            } else {
-                throw new Error("Upload failed");
+            if (!data.report?.fileUrl || !data.report?.summary || !data.report?.ocr) {
+                throw new Error("The server returned an incomplete report");
             }
+
+            setFileUrl(data.report.fileUrl);
+            setOcrResult(data.report.ocr);
+            setSummary(data.report.summary);
+            setUploadStatus("success");
+            toast.success("Report processed and saved", {
+                description: `${data.labResultCount ?? 0} structured lab result${data.labResultCount === 1 ? "" : "s"} saved.`,
+            });
         } catch (error) {
             console.error("Error uploading file:", error);
             setUploadStatus("error");
 
             toast.error("Upload failed", {
-                description: "There was an error uploading your report. Please try again.",
+                description: error instanceof Error ? error.message : "There was an error uploading your report. Please try again.",
             });
         } finally {
             setStatusMessage("");
@@ -219,7 +159,7 @@ export default function UploadReportPage() {
                                 type="file"
                                 className="hidden"
                                 onChange={handleFileChange}
-                                accept="image/*,.pdf"
+                                accept="application/pdf,image/jpeg,image/png,image/webp"
                             />
                             <label htmlFor="file-upload" className="cursor-pointer">
                                 <div className="flex flex-col items-center justify-center space-y-2">
@@ -229,6 +169,12 @@ export default function UploadReportPage() {
                                 </div>
                             </label>
                         </div>
+                        <div className="grid gap-3 md:grid-cols-3">
+                            <Input value={sourceLab} onChange={(event) => setSourceLab(event.target.value)} maxLength={160} placeholder="Source lab (optional)" aria-label="Source lab" />
+                            <Input value={sourceCountry} onChange={(event) => setSourceCountry(event.target.value)} maxLength={80} placeholder="Country, e.g. India" aria-label="Source country" />
+                            <Input value={reportDate} onChange={(event) => setReportDate(event.target.value)} type="date" aria-label="Report date" />
+                        </div>
+                        <p className="text-xs text-gray-500">Source metadata keeps results from different labs and countries traceable. Printed reference ranges remain authoritative.</p>
 
                         {file && (
                             <div className="flex items-center space-x-2 rounded-md bg-gray-50 p-3">
@@ -239,9 +185,9 @@ export default function UploadReportPage() {
                             </div>
                         )}
                         {uploading && (
-                            <div className="space-y-2">
-                                <Progress value={uploadProgress} className="h-2 w-full" />
-                                <p className="text-xs text-gray-500">{statusMessage}</p>
+                            <div className="flex items-center gap-3 rounded-md border border-teal-200 bg-teal-50 p-3">
+                                <span className="h-3 w-3 animate-pulse rounded-full bg-teal-600" aria-hidden="true" />
+                                <p className="text-xs text-teal-900">{statusMessage}</p>
                             </div>
                         )}
                         {fileUrl && (

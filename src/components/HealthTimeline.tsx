@@ -75,7 +75,7 @@ export default function HealthTimeline() {
 
     const fetchAppointments = async () => {
         setLoading(true);
-        const fetchedAppointments = await getAppointments(user!.id);
+        const fetchedAppointments = await getAppointments();
         const formattedAppointments = fetchedAppointments.map((apt: Appointment) => ({
             id: apt._id,
             date: apt.date,

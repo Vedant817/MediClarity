@@ -1,50 +1,62 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { extractStructuredLabs, llmMessageText } from "@/lib/lab-extraction";
+import { getLLM } from "@/lib/llm";
+import { getEntitlements } from "@/lib/entitlements";
+import { extractReportEnrichment } from "@/lib/report-enrichment";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+});
+const metadataSchema = z.object({
+  sourceLab: z.string().trim().max(160).optional(),
+  sourceCountry: z.string().trim().max(80).optional(),
+  reportDate: isoDateSchema.optional(),
+}).optional();
+const requestSchema = z.object({ text: z.string().trim().min(1).max(200_000), metadata: metadataSchema });
 
 const patientFriendlyPrompt = (text: string) => `
-You are a compassionate medical assistant. Your task is to summarize the following medical report for a patient who has no medical background.
+You are a health-information assistant, not a doctor. Explain the supplied medical report in simple language. Do not diagnose, prescribe, or invent facts. When the report does not contain an answer, say so plainly.
 
-**Please explain everything in simple, easy-to-understand language.** Avoid medical jargon as much as possible. If you must use a medical term, please explain it immediately in a simple way.
+Structure the response as:
+1. What this report was for
+2. Main findings
+3. What the findings may mean and appropriate questions for a clinician
+4. Key takeaways
 
-The summary should be structured as follows:
+End exactly with: "For information only, not medical advice. Discuss results and reference ranges with a qualified clinician."
 
-**1. What was this report for?**
-   - Briefly explain the reason for the test or visit in one or two simple sentences.
-
-**2. What were the main findings?**
-   - Summarize the key results from the report.
-   - If there are any measurements or numbers, explain what they mean in a simple way (e.g., "Your blood pressure was a little high, which is like the pressure in your water pipes being a bit strong.").
-   - Use analogies and simple comparisons to help understanding.
-
-**3. What do these findings mean for my health?**
-   - Explain the implications of the findings in a clear and reassuring way.
-   - If everything is normal, state that clearly.
-   - If there are any areas of concern, explain what they are and what the next steps might be, without causing unnecessary alarm.
-
-**4. Key takeaways:**
-   - Provide a few bullet points that summarize the most important information from the report.
-
-Here is the report content:
-
-"${text}"
+Report content:
+"""${text}"""
 `;
 
-
 export async function POST(req: NextRequest) {
-    try {
-        const body = await req.json();
-        const { text } = body;
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        const result = await model.generateContent(patientFriendlyPrompt(text));
-        const response = await result.response;
-        const summary = response.text();
-
-        return NextResponse.json({ summary });
-    } catch (err) {
-        console.error("Summary Error:", err);
-        return NextResponse.json({ error: "Failed to generate summary" }, { status: 500 });
+  try {
+    const parsed = requestSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: "A non-empty report text is required" }, { status: 400 });
     }
+
+    const { text, metadata } = parsed.data;
+    const entitlements = await getEntitlements(userId);
+    const [summaryMessage, labs, enrichment] = await Promise.all([
+      getLLM("chat").invoke(patientFriendlyPrompt(text)),
+      extractStructuredLabs(text, metadata),
+      entitlements.medications || entitlements.education
+        ? extractReportEnrichment(text)
+        : Promise.resolve({ medications: [], education: [] }),
+    ]);
+    const summary = llmMessageText(summaryMessage).trim();
+    if (!summary) throw new Error("The model returned an empty summary");
+
+    return NextResponse.json({ summary, labs, ...enrichment });
+  } catch (err) {
+    console.error("Summary Error:", err);
+    return NextResponse.json({ error: "Failed to generate summary" }, { status: 500 });
+  }
 }

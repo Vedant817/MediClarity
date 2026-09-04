@@ -1,5 +1,14 @@
 import { cloudinary } from "../../../lib/cloudinary";
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { getReportQuota, quotaExceededResponse } from "@/lib/report-quota";
+import {
+    MAX_UPLOAD_BODY_BYTES,
+    safeUploadFileName,
+    validateReportFile,
+} from "@/lib/upload-security";
+
+export const runtime = "nodejs";
 
 interface CloudinaryUploadResult {
     secure_url: string;
@@ -34,21 +43,43 @@ const uploadToCloudinary = (fileUri: string, fileName: string): Promise<Cloudina
 
 export async function POST(req: NextRequest) {
     try {
+        const { userId } = await auth();
+
+        if (!userId) {
+            return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+        }
+
+        const quota = await getReportQuota(userId);
+        if (!quota.allowed) return quotaExceededResponse(quota);
+
+        const contentLength = Number(req.headers.get("content-length"));
+        if (Number.isFinite(contentLength) && contentLength > MAX_UPLOAD_BODY_BYTES) {
+            return NextResponse.json({ message: "Report upload is limited to 15 MB" }, { status: 413 });
+        }
+
         const formData = await req.formData();
         const file = formData.get("file");
 
-        if (!file || !(file instanceof Blob)) {
+        if (!file || !(file instanceof File)) {
             return NextResponse.json({ message: "No file provided" }, { status: 400 });
         }
 
-        const fileBuffer = await file.arrayBuffer();
+        let fileBytes: Uint8Array;
+        try {
+            fileBytes = await validateReportFile(file);
+        } catch (error) {
+            return NextResponse.json(
+                { message: error instanceof Error ? error.message : "Invalid report file" },
+                { status: 400 },
+            );
+        }
         const mimeType = file.type;
         const encoding = "base64";
-        const base64Data = Buffer.from(fileBuffer).toString("base64");
+        const base64Data = Buffer.from(fileBytes).toString("base64");
 
         const fileUri = `data:${mimeType};${encoding},${base64Data}`;
 
-        const res = await uploadToCloudinary(fileUri, file.name);
+        const res = await uploadToCloudinary(fileUri, safeUploadFileName(file.name));
 
         if (res.success && res.result) {
             return NextResponse.json({
@@ -61,7 +92,6 @@ export async function POST(req: NextRequest) {
         }
     } catch (error) {
         console.error("Upload error:", error);
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-        return NextResponse.json({ message: "error", error: errorMessage }, { status: 500 });
+        return NextResponse.json({ message: "Upload failed" }, { status: 500 });
     }
 }
