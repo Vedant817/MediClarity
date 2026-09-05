@@ -226,7 +226,7 @@ export default function UploadReportPage() {
                                     </div>
                                     <div className="flex w-full items-center gap-2">
                                         <Select value={selectedLang} onValueChange={handleLanguageChange} >
-                                            <SelectTrigger className="w-full">
+                                            <SelectTrigger className="w-full" aria-label="Summary language">
                                                 <SelectValue placeholder="Select a language" />
                                             </SelectTrigger>
                                             <SelectContent>

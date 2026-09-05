@@ -211,6 +211,7 @@ const AIChatPage = () => {
             <div className="border-t p-4 bg-white shadow-sm">
                 <div className="container mx-auto flex gap-2">
                     <Input
+                        aria-label="Message about medical report"
                         placeholder="Ask about your medical report..."
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
@@ -219,6 +220,7 @@ const AIChatPage = () => {
                         disabled={isThinking || !isSessionInitialized}
                     />
                     <Button
+                        aria-label="Send message"
                         onClick={sendMessage}
                         disabled={isThinking || !input.trim() || !isSessionInitialized}
                         className="bg-teal-700"

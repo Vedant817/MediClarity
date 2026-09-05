@@ -335,6 +335,7 @@ export default function ConversationalScheduler() {
 
                 <form onSubmit={handleSubmit} className="flex gap-2">
                     <Input
+                        aria-label="Appointment request"
                         className="flex-1 border rounded p-2"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}

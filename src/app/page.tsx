@@ -29,6 +29,9 @@ const comingSoon = ["Wearable integrations", "Predictive analytics", "E-prescrib
 export default function Home() {
   return (
     <main className="min-h-screen bg-[#f7f3e9] text-[#102c2a] selection:bg-[#ff735c]/30">
+      <a href="#main-content" className="sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:not-sr-only focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:font-semibold focus:text-[#102c2a] focus:shadow-lg">
+        Skip to main content
+      </a>
       <header className="sticky top-0 z-50 border-b border-[#102c2a]/15 bg-[#f7f3e9]/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 lg:px-8">
           <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight" aria-label="MediClarity home">
@@ -42,12 +45,18 @@ export default function Home() {
           </nav>
           <div className="flex items-center gap-2">
             <Button variant="ghost" asChild><Link href="/login">Log in</Link></Button>
-            <Button asChild className="bg-[#102c2a] text-[#f7f3e9] hover:bg-[#0b766e]"><Link href="/signup">Upload a report <ArrowRight aria-hidden="true" /></Link></Button>
+            <Button asChild className="bg-[#102c2a] text-[#f7f3e9] hover:bg-[#0b766e]">
+              <Link href="/signup">
+                <span className="sm:hidden">Upload</span>
+                <span className="hidden sm:inline">Upload a report</span>
+                <ArrowRight className="hidden sm:block" aria-hidden="true" />
+              </Link>
+            </Button>
           </div>
         </div>
       </header>
 
-      <section className="border-b border-[#102c2a]/15">
+      <section id="main-content" className="border-b border-[#102c2a]/15">
         <div className="mx-auto grid max-w-7xl gap-12 px-5 py-16 lg:grid-cols-[1.05fr_.95fr] lg:px-8 lg:py-24">
           <div className="self-center">
             <p className="mb-5 font-mono text-xs font-semibold uppercase tracking-[0.2em] text-[#0b766e]">Documents in. Comparable health data out.</p>

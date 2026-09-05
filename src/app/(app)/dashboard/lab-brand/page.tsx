@@ -56,7 +56,7 @@ export default function LabBrandPage() {
             <Input className="mt-2" type="url" inputMode="url" placeholder="https://lab.example/logo.png" value={brand.logoUrl} onChange={(event) => setBrand({ ...brand, logoUrl: event.target.value })} disabled={!canEdit} />
           </label>
           <label className="block text-sm font-medium">Accent color
-            <span className="mt-2 flex items-center gap-3"><input className="h-10 w-14 rounded border p-1" type="color" value={brand.accentColor} onChange={(event) => setBrand({ ...brand, accentColor: event.target.value })} disabled={!canEdit} /><Input value={brand.accentColor} pattern="#[0-9a-fA-F]{6}" onChange={(event) => setBrand({ ...brand, accentColor: event.target.value })} disabled={!canEdit} /></span>
+            <span className="mt-2 flex items-center gap-3"><input className="h-10 w-14 rounded border p-1" type="color" value={brand.accentColor} onChange={(event) => setBrand({ ...brand, accentColor: event.target.value })} disabled={!canEdit} aria-label="Accent color picker" /><Input aria-label="Accent color hex value" value={brand.accentColor} pattern="#[0-9a-fA-F]{6}" onChange={(event) => setBrand({ ...brand, accentColor: event.target.value })} disabled={!canEdit} /></span>
           </label>
           <div className="flex items-center gap-3"><Button type="submit" className="bg-teal-700 hover:bg-teal-800" disabled={!canEdit}>Save branding</Button><span className="text-sm text-slate-500" aria-live="polite">{status}</span></div>
         </form>

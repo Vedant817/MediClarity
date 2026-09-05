@@ -104,6 +104,7 @@ export default function ChatWithAI({ summary, ocr }: Props) {
             </div>
             <div className="flex gap-2 mt-4">
                 <Input
+                    aria-label="Question about report summary"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}

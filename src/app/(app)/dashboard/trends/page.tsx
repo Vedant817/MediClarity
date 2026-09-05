@@ -78,7 +78,7 @@ export default function TrendsPage() {
                   <CardDescription>{series.length} result{series.length === 1 ? "" : "s"} in {active?.unit ?? "the lab's reported unit"}</CardDescription>
                 </div>
                 <Select value={selected} onValueChange={setSelected}>
-                  <SelectTrigger className="w-full md:w-72"><SelectValue placeholder="Choose a test" /></SelectTrigger>
+                  <SelectTrigger className="w-full md:w-72" aria-label="Lab test"><SelectValue placeholder="Choose a test" /></SelectTrigger>
                   <SelectContent>{options.map((lab) => <SelectItem key={lab.seriesKey} value={lab.seriesKey}>{lab.canonicalName} ({lab.unit ?? "unitless"})</SelectItem>)}</SelectContent>
                 </Select>
               </CardHeader>

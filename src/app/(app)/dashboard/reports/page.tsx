@@ -176,12 +176,12 @@ export default function ReportsPage() {
                             </div>
                             {selectedReport.education && selectedReport.education.length > 0 && <div className="grid gap-2 md:grid-cols-3">{selectedReport.education.map((card) => <div key={card._id} className="border p-3"><p className="font-semibold">{card.title}</p><p className="mt-1 text-xs text-gray-600">{card.summary}</p></div>)}</div>}
                             <div className="grid gap-2 border-t pt-4 md:grid-cols-[1fr_auto_auto_auto]">
-                                <Input value={shareEmail} onChange={(event) => setShareEmail(event.target.value)} placeholder="Doctor or family email (optional)" type="email" />
+                                <Input aria-label="Doctor or family email for sharing" value={shareEmail} onChange={(event) => setShareEmail(event.target.value)} placeholder="Doctor or family email (optional)" type="email" />
                                 <Button variant="outline" onClick={createShare}><Share2 className="mr-2 h-4 w-4" />Share 7 days</Button>
                                 <Button variant="outline" onClick={downloadDoctorPacket}><Download className="mr-2 h-4 w-4" />Doctor PDF</Button>
                                 <Button variant="outline" onClick={downloadFhir}><Braces className="mr-2 h-4 w-4" />FHIR</Button>
                             </div>
-                            {shareUrl && <div className="flex items-center gap-2 border border-teal-200 bg-teal-50 p-3"><code className="min-w-0 flex-1 truncate text-xs">{shareUrl}</code><Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(shareUrl)}><Copy className="h-4 w-4" /></Button><a className="text-xs font-semibold text-teal-700" href={`https://wa.me/?text=${encodeURIComponent(`Medical report: ${shareUrl}`)}`} target="_blank" rel="noreferrer">WhatsApp</a></div>}
+                            {shareUrl && <div className="flex items-center gap-2 border border-teal-200 bg-teal-50 p-3"><code className="min-w-0 flex-1 truncate text-xs">{shareUrl}</code><Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(shareUrl)} aria-label="Copy share link"><Copy className="h-4 w-4" aria-hidden="true" /></Button><a className="text-xs font-semibold text-teal-700" href={`https://wa.me/?text=${encodeURIComponent(`Medical report: ${shareUrl}`)}`} target="_blank" rel="noreferrer">WhatsApp</a></div>}
                             {actionError && <p className="border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{actionError}</p>}
                             <div className="text-red-600 font-semibold">For information only, not medical advice or diagnosis. Verify structured rows against the original report and consult a qualified clinician.</div>
                         </div>
