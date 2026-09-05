@@ -12,18 +12,32 @@ export default function TriagePage() {
   const [symptoms, setSymptoms] = useState("");
   const [age, setAge] = useState("");
   const [result, setResult] = useState<Result | null>(null);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
-    const response = await fetch("/api/triage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ symptoms: symptoms.split(",").map((value) => value.trim()).filter(Boolean), age: age ? Number(age) : undefined }),
-    });
-    setResult(response.ok ? await response.json() : null);
-    setLoading(false);
+    setError("");
+    setResult(null);
+    try {
+      const response = await fetch("/api/triage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symptoms: symptoms.split(",").map((value) => value.trim()).filter(Boolean), age: age ? Number(age) : undefined }),
+      });
+      const payload = await response.json() as Partial<Result> & { error?: string; status?: string };
+      if (payload.urgency && payload.timeframe && payload.specialist && payload.redFlags && payload.selfCare && payload.disclaimer) {
+        setResult(payload as Result);
+        if (!response.ok) setError("The AI service is unavailable. Showing conservative emergency guidance from the safety rules.");
+      } else if (!response.ok) {
+        setError(payload.error || "Care direction is temporarily unavailable.");
+      }
+    } catch {
+      setError("Care direction could not be reached. If symptoms are severe, sudden, or worsening, contact local emergency services.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -43,6 +57,8 @@ export default function TriagePage() {
         </label>
         <Button disabled={loading} className="bg-teal-700 hover:bg-teal-800">{loading ? "Checking…" : "Check care urgency"}</Button>
       </form>
+
+      {error && <p className="border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">{error}</p>}
 
       {result && (
         <section className={`border-l-4 bg-white p-6 shadow-sm ${result.urgency === "high" ? "border-rose-600" : result.urgency === "medium" ? "border-amber-500" : "border-teal-600"}`}>

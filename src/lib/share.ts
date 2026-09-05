@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { Types } from "mongoose";
 import connectDB from "@/lib/db";
+import { isValidShareToken } from "@/lib/share-token";
 import AuditLog, { AuditAction } from "@/models/auditLog";
 import LabResult from "@/models/labResult";
 import LabBrand from "@/models/labBrand";
@@ -24,7 +25,7 @@ export function hashAuditIp(ip: string | null): string | undefined {
 }
 
 export async function readPublicShare(token: string) {
-  if (!token || token.length > 128) return null;
+  if (!isValidShareToken(token)) return null;
   await connectDB();
 
   const share = await VaultShare.findOne({
