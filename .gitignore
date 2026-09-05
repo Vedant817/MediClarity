@@ -44,6 +44,7 @@ next-env.d.ts
 /temp
 
 /attachments
+/output/playwright/
 
 # local Python artifacts for the optional fine-tune track
 __pycache__/
