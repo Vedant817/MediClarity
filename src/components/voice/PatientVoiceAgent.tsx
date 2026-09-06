@@ -104,10 +104,14 @@ export default function PatientVoiceAgent() {
   const [selectedLocale, setSelectedLocale] = useState<VoiceLocale>("en-IN");
   const [startRequested, setStartRequested] = useState(false);
   const [noiseMode, setNoiseMode] = useState<"standard" | "noisy">("standard");
+  const [browserSpeaking, setBrowserSpeaking] = useState(false);
+  const [deviceVoiceAvailable, setDeviceVoiceAvailable] = useState<boolean | null>(null);
   const [text, setText] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [reconnectNotice, setReconnectNotice] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const spokenMessageIdsRef = useRef(new Set<string>());
+  const browserInterruptChunksRef = useRef(0);
 
   const loadSession = useCallback(async (locale: VoiceLocale, startAfterConnect = false) => {
     setIsLoadingSession(true);
@@ -164,6 +168,8 @@ export default function PatientVoiceAgent() {
     endCall,
     toggleMute,
     sendText,
+    sendJSON,
+    lastCustomMessage,
   } = useVoiceAgent({
     agent: session?.agent || "PatientVoiceAgent",
     name: session?.name || "pending",
@@ -198,6 +204,80 @@ export default function PatientVoiceAgent() {
     });
   }, [connected, session, startCall, startRequested]);
 
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) {
+      setDeviceVoiceAvailable(false);
+      return;
+    }
+    const updateAvailability = () => {
+      const locale = selectedLocale.toLowerCase();
+      const language = locale.split("-")[0];
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices.length) {
+        setDeviceVoiceAvailable(null);
+        return;
+      }
+      setDeviceVoiceAvailable(voices.some((voice) => {
+        const voiceLocale = voice.lang.toLowerCase();
+        return voiceLocale === locale || voiceLocale.split("-")[0] === language;
+      }));
+    };
+    updateAvailability();
+    window.speechSynthesis.addEventListener("voiceschanged", updateAvailability);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", updateAvailability);
+  }, [selectedLocale]);
+
+  useEffect(() => {
+    if (!lastCustomMessage || typeof lastCustomMessage !== "object") return;
+    const message = lastCustomMessage as Record<string, unknown>;
+    if (
+      message.type !== "browser_tts" ||
+      typeof message.id !== "string" ||
+      typeof message.text !== "string" ||
+      message.locale !== selectedLocale ||
+      spokenMessageIdsRef.current.has(message.id)
+    ) return;
+    spokenMessageIdsRef.current.add(message.id);
+    if (spokenMessageIdsRef.current.size > 200) spokenMessageIdsRef.current.clear();
+    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+      setLocalError("This device does not provide speech output. You can continue using the visible transcript and typed input.");
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(message.text.slice(0, 3_500));
+    utterance.lang = selectedLocale;
+    utterance.rate = 1.02;
+    const language = selectedLocale.toLowerCase().split("-")[0];
+    utterance.voice = window.speechSynthesis.getVoices().find((voice) =>
+      voice.lang.toLowerCase() === selectedLocale.toLowerCase(),
+    ) ?? window.speechSynthesis.getVoices().find((voice) =>
+      voice.lang.toLowerCase().split("-")[0] === language,
+    ) ?? null;
+    utterance.onstart = () => setBrowserSpeaking(true);
+    utterance.onend = () => setBrowserSpeaking(false);
+    utterance.onerror = () => setBrowserSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  }, [lastCustomMessage, selectedLocale]);
+
+  useEffect(() => {
+    if (!browserSpeaking) {
+      browserInterruptChunksRef.current = 0;
+      return;
+    }
+    const threshold = noiseMode === "noisy" ? 0.085 : 0.045;
+    browserInterruptChunksRef.current = audioLevel > threshold
+      ? browserInterruptChunksRef.current + 1
+      : 0;
+    if (browserInterruptChunksRef.current < (noiseMode === "noisy" ? 4 : 3)) return;
+    browserInterruptChunksRef.current = 0;
+    window.speechSynthesis.cancel();
+    setBrowserSpeaking(false);
+    sendJSON({ type: "interrupt" });
+  }, [audioLevel, browserSpeaking, noiseMode, sendJSON]);
+
+  useEffect(() => () => {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  }, []);
+
   const beginCall = async () => {
     setLocalError(null);
     if (!session) {
@@ -218,6 +298,8 @@ export default function PatientVoiceAgent() {
   };
 
   const finishCall = () => {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    setBrowserSpeaking(false);
     endCall();
     setSession(null);
     setStartRequested(false);
@@ -231,8 +313,9 @@ export default function PatientVoiceAgent() {
     setText("");
   };
 
-  const active = status !== "idle";
-  const currentState = stateCopy[status];
+  const effectiveStatus: VoiceStatus = browserSpeaking ? "speaking" : status;
+  const active = effectiveStatus !== "idle";
+  const currentState = stateCopy[effectiveStatus];
   const displayError = localError || error || outputDeviceError || sessionError;
   const selectedLanguage = VOICE_LANGUAGES.find((language) => language.locale === selectedLocale) ?? VOICE_LANGUAGES[0];
 
@@ -314,7 +397,7 @@ export default function PatientVoiceAgent() {
                       <span
                         key={index}
                         className={`w-1 rounded-full bg-gradient-to-t from-fuchsia-600 to-pink-300 transition-[height] duration-100 motion-reduce:transition-none ${
-                          status === "thinking" ? "motion-safe:animate-pulse" : ""
+                          effectiveStatus === "thinking" ? "motion-safe:animate-pulse" : ""
                         }`}
                         style={{ height: `${liveHeight}px`, transitionDelay: `${index * 16}ms` }}
                         aria-hidden="true"
@@ -323,7 +406,7 @@ export default function PatientVoiceAgent() {
                   })}
                 </div>
                 <span className="absolute bottom-4 rounded-full bg-white px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-widest text-fuchsia-800 shadow-sm">
-                  {status}
+                  {effectiveStatus}
                 </span>
               </div>
 
@@ -371,7 +454,12 @@ export default function PatientVoiceAgent() {
               )}
               {!active && (
                 <p className="mt-5 max-w-md text-xs leading-5 text-slate-500">
-                  Starting sends a bounded snapshot of your saved health record to the voice processors for this conversation. Browser echo cancellation, noise suppression, and automatic gain control are enabled when supported.
+                  Starting sends a bounded snapshot of your saved health record to Cloudflare for this conversation. Speech output uses a voice installed by your browser or device, with no additional paid speech key. Browser echo cancellation, noise suppression, and automatic gain control are enabled when supported.
+                </p>
+              )}
+              {deviceVoiceAvailable === false && (
+                <p className="mt-3 max-w-md text-xs leading-5 text-amber-700" role="status">
+                  This device has no {selectedLanguage.label} voice installed. The transcript still works; install that language in your device speech settings for spoken replies.
                 </p>
               )}
             </div>
@@ -383,7 +471,7 @@ export default function PatientVoiceAgent() {
                 <h2 className="font-semibold text-slate-900">Conversation</h2>
                 <p className="text-xs text-slate-500">Voice and typed questions appear here.</p>
               </div>
-              <Volume2 className={`h-5 w-5 ${status === "speaking" ? "text-fuchsia-700" : "text-slate-300"}`} aria-hidden="true" />
+              <Volume2 className={`h-5 w-5 ${effectiveStatus === "speaking" ? "text-fuchsia-700" : "text-slate-300"}`} aria-hidden="true" />
             </div>
 
             <ScrollArea className="h-[340px] flex-1 px-5 py-5" aria-label="Voice agent transcript" role="log" aria-live="polite">
