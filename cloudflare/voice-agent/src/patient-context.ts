@@ -5,7 +5,10 @@ export interface PatientContext {
   recentReports: Array<{ reportDate?: string; sourceLab?: string; summary: string }>;
   recentLabs: Array<{ test: string; value: number; unit?: string; flag?: string; date?: string; referenceRange?: { min?: number; max?: number } }>;
   activeMedications: Array<{ name: string; dose?: string; frequency?: string; startDate?: string }>;
-  upcomingAppointments: Array<{ date: string; time?: string; providerId?: string; appointmentType?: string }>;
+  medicationHistory: Array<{ name: string; dose?: string; frequency?: string; startDate?: string; endDate?: string; status?: string }>;
+  upcomingAppointments: Array<{ date: string; time?: string; providerName?: string; specialty?: string; appointmentType?: string }>;
+  appointmentHistory: Array<{ date: string; time?: string; providerName?: string; specialty?: string; appointmentType?: string; status?: string }>;
+  recordCounts: { reportCount: number; labCount: number; medicationCount: number; appointmentCount: number };
 }
 
 export interface PatientContextEnv {
@@ -58,6 +61,18 @@ export function normalizePatientContext(value: unknown): PatientContext {
     const name = text(item.name, 120);
     return name ? [{ name, dose: text(item.dose, 100), frequency: text(item.frequency, 160), startDate: text(item.startDate, 40) }] : [];
   });
+  const medicationHistory = list(root.medicationHistory, 50).flatMap((entry) => {
+    const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+    const name = text(item.name, 120);
+    return name ? [{
+      name,
+      dose: text(item.dose, 100),
+      frequency: text(item.frequency, 160),
+      startDate: text(item.startDate, 40),
+      endDate: text(item.endDate, 40),
+      status: text(item.status, 20),
+    }] : [];
+  });
   const recentLabs = list(root.recentLabs, 100).flatMap((entry) => {
     const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
     const test = text(item.test, 120);
@@ -78,8 +93,30 @@ export function normalizePatientContext(value: unknown): PatientContext {
   const upcomingAppointments = list(root.upcomingAppointments, 20).flatMap((entry) => {
     const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
     const date = text(item.date, 40);
-    return date ? [{ date, time: text(item.time, 30), providerId: text(item.providerId, 128), appointmentType: text(item.appointmentType, 80) }] : [];
+    return date ? [{ date, time: text(item.time, 30), providerName: text(item.providerName, 160), specialty: text(item.specialty, 120), appointmentType: text(item.appointmentType, 80) }] : [];
   });
+  const appointmentHistory = list(root.appointmentHistory, 20).flatMap((entry) => {
+    const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+    const date = text(item.date, 40);
+    return date ? [{
+      date,
+      time: text(item.time, 30),
+      providerName: text(item.providerName, 160),
+      specialty: text(item.specialty, 120),
+      appointmentType: text(item.appointmentType, 80),
+      status: text(item.status, 40),
+    }] : [];
+  });
+  const rawCounts = root.recordCounts && typeof root.recordCounts === "object"
+    ? root.recordCounts as Record<string, unknown>
+    : {};
+  const count = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  const recordCounts = {
+    reportCount: count(rawCounts.reportCount),
+    labCount: count(rawCounts.labCount),
+    medicationCount: count(rawCounts.medicationCount),
+    appointmentCount: count(rawCounts.appointmentCount),
+  };
   const preferences = root.preferences && typeof root.preferences === "object"
     ? {
         locale: text((root.preferences as Record<string, unknown>).locale, 50),
@@ -94,7 +131,10 @@ export function normalizePatientContext(value: unknown): PatientContext {
     recentLabs,
     recentReports,
     activeMedications,
+    medicationHistory,
     upcomingAppointments,
+    appointmentHistory,
+    recordCounts,
   };
 }
 

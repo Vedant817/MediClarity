@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     if (!await consumeVoiceServiceNonce(nonce)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    const patientContext = await getPatientVoiceContext(capability.sub);
+    const patientContext = await getPatientVoiceContext(capability.sub, capability.locale);
     return NextResponse.json(
       { sessionId: capability.sid, patientContext },
       { headers: { "Cache-Control": "no-store, private" } },

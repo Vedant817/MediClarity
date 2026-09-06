@@ -8,6 +8,7 @@ import {
   CircleStop,
   HeartPulse,
   LoaderCircle,
+  Languages,
   Mic,
   MicOff,
   RefreshCw,
@@ -15,15 +16,22 @@ import {
   ShieldAlert,
   Sparkles,
   Volume2,
+  Wind,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  VOICE_LANGUAGES,
+  type VoiceLocale,
+  voiceLocaleForPreference,
+} from "@/config/voice-languages";
 
 type VoiceSession = {
   host: string;
   name: string;
   token: string;
   agent?: string;
+  locale: VoiceLocale;
 };
 
 const stateCopy: Record<VoiceStatus, { label: string; detail: string }> = {
@@ -77,24 +85,31 @@ function getSession(value: unknown): VoiceSession {
     throw new Error("The voice session is missing connection details.");
   }
 
+  if (candidate.locale !== undefined && !VOICE_LANGUAGES.some((language) => language.locale === candidate.locale)) {
+    throw new Error("The voice session returned an unsupported language.");
+  }
   return {
     host: normalizeHost(host),
     name,
     token,
     agent: candidate.agent,
+    locale: (candidate.locale as VoiceLocale | undefined) ?? "en-IN",
   };
 }
 
 export default function PatientVoiceAgent() {
   const [session, setSession] = useState<VoiceSession | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
-  const [isLoadingSession, setIsLoadingSession] = useState(true);
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
+  const [selectedLocale, setSelectedLocale] = useState<VoiceLocale>("en-IN");
+  const [startRequested, setStartRequested] = useState(false);
+  const [noiseMode, setNoiseMode] = useState<"standard" | "noisy">("standard");
   const [text, setText] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [reconnectNotice, setReconnectNotice] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
-  const loadSession = useCallback(async () => {
+  const loadSession = useCallback(async (locale: VoiceLocale, startAfterConnect = false) => {
     setIsLoadingSession(true);
     setSessionError(null);
     setLocalError(null);
@@ -102,6 +117,8 @@ export default function PatientVoiceAgent() {
     try {
       const response = await fetch("/api/voice/session", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale }),
         cache: "no-store",
         credentials: "same-origin",
       });
@@ -116,6 +133,7 @@ export default function PatientVoiceAgent() {
       }
 
       setSession(getSession(payload));
+      setStartRequested(startAfterConnect);
     } catch (error) {
       setSession(null);
       setSessionError(
@@ -127,8 +145,11 @@ export default function PatientVoiceAgent() {
   }, []);
 
   useEffect(() => {
-    void loadSession();
-  }, [loadSession]);
+    void fetch("/api/settings", { cache: "no-store", credentials: "same-origin" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => setSelectedLocale(voiceLocaleForPreference(data?.preferences?.locale)))
+      .catch(() => undefined);
+  }, []);
 
   const {
     status,
@@ -138,6 +159,7 @@ export default function PatientVoiceAgent() {
     isMuted,
     connected,
     error,
+    outputDeviceError,
     startCall,
     endCall,
     toggleMute,
@@ -148,9 +170,10 @@ export default function PatientVoiceAgent() {
     host: session?.host,
     query: session ? { token: session.token } : undefined,
     enabled: Boolean(session),
-    silenceDurationMs: 650,
-    interruptThreshold: 0.05,
-    interruptChunks: 2,
+    silenceThreshold: noiseMode === "noisy" ? 0.065 : 0.035,
+    silenceDurationMs: noiseMode === "noisy" ? 700 : 560,
+    interruptThreshold: noiseMode === "noisy" ? 0.085 : 0.045,
+    interruptChunks: noiseMode === "noisy" ? 4 : 3,
     onReconnect: () => {
       setReconnectNotice(true);
       window.setTimeout(() => setReconnectNotice(false), 3500);
@@ -161,8 +184,26 @@ export default function PatientVoiceAgent() {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [transcript, interimTranscript]);
 
+  useEffect(() => {
+    if (!startRequested || !connected || !session) return;
+    setStartRequested(false);
+    void startCall().catch((callError: unknown) => {
+      const message = callError instanceof Error ? callError.message : "Microphone access failed.";
+      const denied = /permission|denied|notallowed/i.test(message);
+      setLocalError(
+        denied
+          ? "Microphone access is blocked. Allow microphone access in your browser settings, then try again."
+          : message,
+      );
+    });
+  }, [connected, session, startCall, startRequested]);
+
   const beginCall = async () => {
     setLocalError(null);
+    if (!session) {
+      await loadSession(selectedLocale, true);
+      return;
+    }
     try {
       await startCall();
     } catch (callError) {
@@ -176,6 +217,12 @@ export default function PatientVoiceAgent() {
     }
   };
 
+  const finishCall = () => {
+    endCall();
+    setSession(null);
+    setStartRequested(false);
+  };
+
   const submitText = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextText = text.trim();
@@ -186,7 +233,8 @@ export default function PatientVoiceAgent() {
 
   const active = status !== "idle";
   const currentState = stateCopy[status];
-  const displayError = localError || error || sessionError;
+  const displayError = localError || error || outputDeviceError || sessionError;
+  const selectedLanguage = VOICE_LANGUAGES.find((language) => language.locale === selectedLocale) ?? VOICE_LANGUAGES[0];
 
   return (
     <section className="mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8" aria-labelledby="voice-agent-title">
@@ -205,9 +253,42 @@ export default function PatientVoiceAgent() {
                 Ask about your reports, lab trends, medications, or upcoming visits. The AI uses the health information saved to your signed-in MediClarity account.
               </p>
             </div>
-            <div className="flex items-center gap-2 rounded-full border border-fuchsia-200 bg-white/80 px-3 py-2 font-mono text-[11px] text-slate-600 shadow-sm">
-              <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-500" : "bg-slate-300"}`} aria-hidden="true" />
-              {connected ? "Secure channel connected" : "Secure channel offline"}
+            <div className="flex flex-col items-end gap-2">
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                <Languages className="h-4 w-4 text-fuchsia-700" aria-hidden="true" />
+                Spoken language
+                <select
+                  value={selectedLocale}
+                  onChange={(event) => {
+                    setSelectedLocale(event.target.value as VoiceLocale);
+                    setSession(null);
+                    setSessionError(null);
+                  }}
+                  disabled={active || isLoadingSession}
+                  className="rounded-lg border border-fuchsia-200 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300 disabled:opacity-60"
+                >
+                  {VOICE_LANGUAGES.map((language) => (
+                    <option key={language.locale} value={language.locale}>{language.label} · {language.nativeLabel}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                <Wind className="h-4 w-4 text-fuchsia-700" aria-hidden="true" />
+                Room noise
+                <select
+                  value={noiseMode}
+                  onChange={(event) => setNoiseMode(event.target.value as "standard" | "noisy")}
+                  disabled={active || isLoadingSession}
+                  className="rounded-lg border border-fuchsia-200 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300 disabled:opacity-60"
+                >
+                  <option value="standard">Standard</option>
+                  <option value="noisy">Noisy room</option>
+                </select>
+              </label>
+              <div className="flex items-center gap-2 rounded-full border border-fuchsia-200 bg-white/80 px-3 py-2 font-mono text-[11px] text-slate-600 shadow-sm">
+                <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-500" : "bg-slate-300"}`} aria-hidden="true" />
+                {connected ? `Connected · ${selectedLanguage.label}` : "Private until you start"}
+              </div>
             </div>
           </div>
         </header>
@@ -255,10 +336,10 @@ export default function PatientVoiceAgent() {
                     size="lg"
                     className="h-12 rounded-full bg-fuchsia-700 px-6 text-white shadow-lg shadow-fuchsia-200 hover:bg-fuchsia-800"
                     onClick={() => void beginCall()}
-                    disabled={!connected || isLoadingSession}
+                    disabled={isLoadingSession || startRequested}
                   >
                     {isLoadingSession ? <LoaderCircle className="animate-spin" /> : <Mic />}
-                    {isLoadingSession ? "Preparing session" : "Start voice session"}
+                    {isLoadingSession || startRequested ? "Preparing private session" : "Start voice conversation"}
                   </Button>
                 ) : (
                   <>
@@ -275,7 +356,7 @@ export default function PatientVoiceAgent() {
                     <Button
                       size="lg"
                       className="h-12 rounded-full bg-slate-950 px-5 text-white hover:bg-slate-800"
-                      onClick={endCall}
+                      onClick={finishCall}
                     >
                       <CircleStop /> End session
                     </Button>
@@ -286,6 +367,11 @@ export default function PatientVoiceAgent() {
               {isMuted && active && (
                 <p className="mt-4 flex items-center gap-2 text-sm font-medium text-amber-700" role="status">
                   <MicOff className="h-4 w-4" /> Your microphone is muted
+                </p>
+              )}
+              {!active && (
+                <p className="mt-5 max-w-md text-xs leading-5 text-slate-500">
+                  Starting sends a bounded snapshot of your saved health record to the voice processors for this conversation. Browser echo cancellation, noise suppression, and automatic gain control are enabled when supported.
                 </p>
               )}
             </div>
@@ -300,7 +386,7 @@ export default function PatientVoiceAgent() {
               <Volume2 className={`h-5 w-5 ${status === "speaking" ? "text-fuchsia-700" : "text-slate-300"}`} aria-hidden="true" />
             </div>
 
-            <ScrollArea className="h-[340px] flex-1 px-5 py-5" aria-label="Voice agent transcript">
+            <ScrollArea className="h-[340px] flex-1 px-5 py-5" aria-label="Voice agent transcript" role="log" aria-live="polite">
               {transcript.length === 0 && !interimTranscript ? (
                 <div className="grid h-full min-h-56 place-items-center text-center">
                   <div className="max-w-xs">
@@ -315,7 +401,7 @@ export default function PatientVoiceAgent() {
                     const fromPatient = message.role === "user";
                     return (
                       <div key={`${message.timestamp}-${index}`} className={`flex ${fromPatient ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${
+                        <div lang={selectedLocale} className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${
                           fromPatient
                             ? "rounded-br-sm bg-fuchsia-700 text-white"
                             : "rounded-bl-sm border border-slate-200 bg-white text-slate-700 shadow-sm"
@@ -329,7 +415,7 @@ export default function PatientVoiceAgent() {
                     );
                   })}
                   {interimTranscript && (
-                    <div className="flex justify-end" aria-live="polite">
+                    <div className="flex justify-end" aria-live="off">
                       <div className="max-w-[88%] rounded-2xl rounded-br-sm border border-dashed border-fuchsia-300 bg-fuchsia-50 px-4 py-3 text-sm italic text-fuchsia-900">
                         <p className="mb-1 font-mono text-[9px] font-semibold uppercase tracking-widest text-fuchsia-600">Hearing now</p>
                         {interimTranscript}
@@ -350,6 +436,7 @@ export default function PatientVoiceAgent() {
                   onChange={(event) => setText(event.target.value)}
                   placeholder={connected ? "Type instead of speaking…" : "Connect to type a question"}
                   disabled={!connected}
+                  maxLength={1_000}
                   className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-200 disabled:bg-slate-100"
                 />
                 <Button type="submit" size="icon" className="rounded-xl bg-fuchsia-700 hover:bg-fuchsia-800" disabled={!connected || !text.trim()} aria-label="Send typed question">
@@ -367,7 +454,7 @@ export default function PatientVoiceAgent() {
               {displayError || "The secure voice channel reconnected."}
             </span>
             {displayError && (
-              <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => void loadSession()}>
+              <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => void loadSession(selectedLocale)}>
                 <RefreshCw /> Try again
               </Button>
             )}
