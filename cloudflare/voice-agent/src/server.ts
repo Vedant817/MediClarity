@@ -1,12 +1,5 @@
 import { Agent, getAgentByName, routeAgentRequest, type Connection } from "agents";
-import {
-  withVoice,
-  WorkersAIFluxSTT,
-  WorkersAITTS,
-  type StreamingTTSProvider,
-  type TTSProvider,
-  type VoiceTurnContext,
-} from "@cloudflare/voice";
+import { withVoice, type VoiceTurnContext } from "@cloudflare/voice";
 import { streamText } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { agentInstanceName, connectionTokenFromRequest, verifyConnectionToken } from "./auth";
@@ -14,7 +7,7 @@ import { fetchPatientContext, type PatientContext } from "./patient-context";
 import { buildClinicalSystemPrompt } from "./prompt";
 import { cleanVoiceTranscript } from "./transcript-filter";
 import { greetingFor, isVoiceLocale, type VoiceLocale } from "./languages";
-import { SarvamStreamingTTS, SarvamTranscriber } from "./sarvam";
+import { WorkersAIWhisperTranscriber } from "./workers-ai-stt";
 
 interface AgentProps extends Record<string, unknown> {
   userId: string;
@@ -24,7 +17,6 @@ interface AgentProps extends Record<string, unknown> {
 interface AppEnv extends Env {
   VOICE_CAPABILITY_SECRET: string;
   VOICE_SERVICE_SECRET: string;
-  SARVAM_API_KEY?: string;
 }
 
 class PatientAgentBase extends Agent<AppEnv> {}
@@ -32,12 +24,6 @@ class PatientAgentBase extends Agent<AppEnv> {}
 const VoiceAgent = withVoice(PatientAgentBase, { historyLimit: 24, maxMessageCount: 500 });
 
 export class PatientVoiceAgent extends VoiceAgent {
-  transcriber = new WorkersAIFluxSTT(this.env.AI, {
-    eotThreshold: 0.72,
-    eagerEotThreshold: 0.56,
-    keyterms: ["MediClarity", "hemoglobin", "cholesterol", "creatinine", "HbA1c"],
-  });
-  tts: TTSProvider & Partial<StreamingTTSProvider> = new WorkersAITTS(this.env.AI);
   private patientContext: PatientContext | null = null;
   private interrupted = false;
 
@@ -84,23 +70,11 @@ export class PatientVoiceAgent extends VoiceAgent {
   }
 
   createTranscriber(_connection: Connection) {
-    const locale = this.voiceLocale();
-    if (locale !== "en-IN" && this.env.SARVAM_API_KEY) {
-      return new SarvamTranscriber(this.env.SARVAM_API_KEY, locale);
-    }
-    return this.transcriber;
+    return new WorkersAIWhisperTranscriber(this.env.AI, this.voiceLocale());
   }
 
   async beforeCallStart(_connection: Connection): Promise<boolean> {
-    if (!this.loadPatientContext()) return false;
-    const locale = this.voiceLocale();
-    if (locale !== "en-IN") {
-      if (!this.env.SARVAM_API_KEY) return false;
-      this.tts = new SarvamStreamingTTS(this.env.SARVAM_API_KEY, locale);
-    } else {
-      this.tts = new WorkersAITTS(this.env.AI, { speaker: "asteria" });
-    }
-    return true;
+    return this.loadPatientContext() !== null;
   }
 
   async onCallStart(connection: Connection): Promise<void> {
@@ -112,6 +86,16 @@ export class PatientVoiceAgent extends VoiceAgent {
     return cleanVoiceTranscript(transcript);
   }
 
+  beforeSynthesize(text: string, connection: Connection): null {
+    connection.send(JSON.stringify({
+      type: "browser_tts",
+      id: crypto.randomUUID(),
+      locale: this.voiceLocale(),
+      text: text.slice(0, 3_500),
+    }));
+    return null;
+  }
+
   async onTurn(transcript: string, context: VoiceTurnContext) {
     const patientContext = this.loadPatientContext();
     if (!patientContext) {
@@ -121,7 +105,7 @@ export class PatientVoiceAgent extends VoiceAgent {
     const wasInterrupted = this.interrupted;
     this.interrupted = false;
     const result = streamText({
-      model: workersAI("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
+      model: workersAI("@cf/meta/llama-3.1-8b-instruct-fp8-fast"),
       system: buildClinicalSystemPrompt(patientContext, this.voiceLocale(), wasInterrupted),
       messages: [
         ...context.messages.map((message) => ({

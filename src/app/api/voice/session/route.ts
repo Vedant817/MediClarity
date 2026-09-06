@@ -16,12 +16,6 @@ export async function POST(request: Request) {
     if (!isVoiceLocale(locale)) {
       return NextResponse.json({ error: "Unsupported voice language" }, { status: 400 });
     }
-    if (locale !== "en-IN" && process.env.VOICE_INDIC_ENABLED !== "true") {
-      return NextResponse.json(
-        { error: "Indian-language voice is not configured on this deployment" },
-        { status: 503 },
-      );
-    }
     const sessionId = randomUUID();
     const { token, claims } = createVoiceCapability(userId, sessionId, locale);
     return NextResponse.json(

@@ -1,10 +1,9 @@
 import type {
-  StreamingTTSProvider,
   Transcriber,
   TranscriberSession,
   TranscriberSessionOptions,
 } from "@cloudflare/voice";
-import { VOICE_LANGUAGES, type VoiceLocale } from "./languages";
+import { whisperLanguage, type VoiceLocale } from "./languages";
 import { pcm16Rms } from "./transcript-filter";
 
 const SAMPLE_RATE = 16_000;
@@ -12,11 +11,6 @@ const MIN_SPEECH_MS = 180;
 const END_SILENCE_MS = 560;
 const MAX_UTTERANCE_MS = 25_000;
 const PRE_ROLL_MS = 180;
-
-function timeoutSignal(signal: AbortSignal | undefined, milliseconds: number): AbortSignal {
-  const timeout = AbortSignal.timeout(milliseconds);
-  return signal ? AbortSignal.any([signal, timeout]) : timeout;
-}
 
 function concatenate(chunks: ArrayBuffer[]): Uint8Array {
   const output = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.byteLength, 0));
@@ -28,33 +22,56 @@ function concatenate(chunks: ArrayBuffer[]): Uint8Array {
   return output;
 }
 
+export function pcm16ToWav(pcm: Uint8Array): Uint8Array {
+  const wav = new Uint8Array(44 + pcm.byteLength);
+  const view = new DataView(wav.buffer);
+  const write = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) wav[offset + index] = value.charCodeAt(index);
+  };
+  write(0, "RIFF");
+  view.setUint32(4, 36 + pcm.byteLength, true);
+  write(8, "WAVE");
+  write(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, SAMPLE_RATE, true);
+  view.setUint32(28, SAMPLE_RATE * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  write(36, "data");
+  view.setUint32(40, pcm.byteLength, true);
+  wav.set(pcm, 44);
+  return wav;
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
 async function transcribe(
-  apiKey: string,
+  ai: Ai,
   locale: VoiceLocale,
   audio: Uint8Array,
   signal: AbortSignal,
 ): Promise<string> {
-  const form = new FormData();
-  const audioBuffer = audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength) as ArrayBuffer;
-  form.set("file", new Blob([audioBuffer], { type: "application/octet-stream" }), "utterance.pcm");
-  form.set("model", "saaras:v4");
-  form.set("mode", "transcribe");
-  form.set("language_code", locale);
-  form.set("input_audio_codec", "pcm_s16le");
-
-  const response = await fetch("https://api.sarvam.ai/speech-to-text", {
-    method: "POST",
-    headers: { "api-subscription-key": apiKey },
-    body: form,
-    signal,
-  });
-  if (!response.ok) throw new Error(`speech recognition failed (${response.status})`);
-  const result = await response.json() as { transcript?: unknown };
-  if (typeof result.transcript !== "string") throw new Error("speech recognition returned no transcript");
-  return result.transcript.trim();
+  const result = await ai.run("@cf/openai/whisper-large-v3-turbo", {
+    audio: toBase64(pcm16ToWav(audio)),
+    task: "transcribe",
+    language: whisperLanguage(locale),
+    vad_filter: true,
+    initial_prompt: "A patient discussing medical reports, laboratory tests, medications, doses, and appointments.",
+    condition_on_previous_text: false,
+    no_speech_threshold: 0.62,
+  }, { signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]) });
+  return typeof result.text === "string" ? result.text.trim() : "";
 }
 
-class SarvamTranscriberSession implements TranscriberSession {
+class WorkersAIWhisperSession implements TranscriberSession {
   private readonly abortController = new AbortController();
   private readonly preRoll: ArrayBuffer[] = [];
   private speechChunks: ArrayBuffer[] = [];
@@ -68,7 +85,7 @@ class SarvamTranscriberSession implements TranscriberSession {
   private pending = Promise.resolve();
 
   constructor(
-    private readonly apiKey: string,
+    private readonly ai: Ai,
     private readonly locale: VoiceLocale,
     private readonly options: TranscriberSessionOptions,
   ) {}
@@ -125,12 +142,7 @@ class SarvamTranscriberSession implements TranscriberSession {
     const audio = concatenate(chunks);
     this.pending = this.pending.then(async () => {
       if (this.closed) return;
-      const transcript = await transcribe(
-        this.apiKey,
-        this.locale,
-        audio,
-        timeoutSignal(this.abortController.signal, 12_000),
-      );
+      const transcript = await transcribe(this.ai, this.locale, audio, this.abortController.signal);
       if (!this.closed && transcript) this.options.onUtterance?.(transcript);
     }).catch((error: unknown) => {
       if (!this.closed) this.options.onFatalError?.(error instanceof Error ? error : new Error("speech recognition failed"));
@@ -138,52 +150,10 @@ class SarvamTranscriberSession implements TranscriberSession {
   }
 }
 
-export class SarvamTranscriber implements Transcriber {
-  constructor(private readonly apiKey: string, private readonly locale: VoiceLocale) {}
+export class WorkersAIWhisperTranscriber implements Transcriber {
+  constructor(private readonly ai: Ai, private readonly locale: VoiceLocale) {}
 
   createSession(options: TranscriberSessionOptions = {}): TranscriberSession {
-    return new SarvamTranscriberSession(this.apiKey, this.locale, options);
-  }
-}
-
-export class SarvamStreamingTTS implements StreamingTTSProvider {
-  constructor(private readonly apiKey: string, private readonly locale: VoiceLocale) {}
-
-  async synthesize(text: string, signal?: AbortSignal): Promise<ArrayBuffer | null> {
-    const chunks: ArrayBuffer[] = [];
-    for await (const chunk of this.synthesizeStream(text, signal)) chunks.push(chunk);
-    return chunks.length ? concatenate(chunks).buffer as ArrayBuffer : null;
-  }
-
-  async *synthesizeStream(text: string, signal?: AbortSignal): AsyncGenerator<ArrayBuffer> {
-    const response = await fetch("https://api.sarvam.ai/text-to-speech/stream", {
-      method: "POST",
-      headers: {
-        "api-subscription-key": this.apiKey,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        text: text.slice(0, 3_500),
-        language_code: this.locale,
-        speaker: VOICE_LANGUAGES[this.locale].speaker,
-        model: "bulbul:v3",
-        pace: 1.04,
-        temperature: 0.55,
-        output_audio_codec: "mp3",
-        enable_preprocessing: true,
-      }),
-      signal: timeoutSignal(signal, 15_000),
-    });
-    if (!response.ok || !response.body) throw new Error(`speech synthesis failed (${response.status})`);
-    const reader = response.body.getReader();
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value.byteLength) yield value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
-      }
-    } finally {
-      reader.releaseLock();
-    }
+    return new WorkersAIWhisperSession(this.ai, this.locale, options);
   }
 }

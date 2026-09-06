@@ -21,6 +21,10 @@ export function languageName(locale: VoiceLocale): string {
   return VOICE_LANGUAGES[locale].name;
 }
 
+export function whisperLanguage(locale: VoiceLocale): string {
+  return locale.slice(0, 2);
+}
+
 export function greetingFor(locale: VoiceLocale, displayName?: string): string {
   const name = displayName ? ` ${displayName}` : "";
   const greetings: Record<VoiceLocale, string> = {

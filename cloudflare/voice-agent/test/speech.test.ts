@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { greetingFor, isVoiceLocale } from "../src/languages";
+import { greetingFor, isVoiceLocale, whisperLanguage } from "../src/languages";
 import { cleanVoiceTranscript, pcm16Rms } from "../src/transcript-filter";
+import { pcm16ToWav, WorkersAIWhisperTranscriber } from "../src/workers-ai-stt";
 
 describe("multilingual speech safety", () => {
   it("recognizes only configured voice locales and localizes greetings", () => {
@@ -8,6 +9,39 @@ describe("multilingual speech safety", () => {
     expect(isVoiceLocale("es-ES")).toBe(false);
     expect(greetingFor("hi-IN", "Asha")).toContain("नमस्ते Asha");
     expect(greetingFor("pa-IN")).toContain("ਸਤ ਸ੍ਰੀ ਅਕਾਲ");
+    expect(whisperLanguage("ta-IN")).toBe("ta");
+  });
+
+  it("wraps microphone PCM in a valid mono 16 kHz WAV for Workers AI", () => {
+    const wav = pcm16ToWav(new Uint8Array([1, 2, 3, 4]));
+    expect(new TextDecoder().decode(wav.slice(0, 4))).toBe("RIFF");
+    expect(new TextDecoder().decode(wav.slice(8, 12))).toBe("WAVE");
+    expect(new DataView(wav.buffer).getUint32(24, true)).toBe(16_000);
+    expect(wav.slice(44)).toEqual(new Uint8Array([1, 2, 3, 4]));
+  });
+
+  it("transcribes a completed Hindi utterance through the Workers AI binding", async () => {
+    const calls: Array<{ model: string; input: Record<string, unknown> }> = [];
+    const ai = {
+      run: async (model: string, input: Record<string, unknown>) => {
+        calls.push({ model, input });
+        return { text: "मेरा हीमोग्लोबिन कितना है?" };
+      },
+    } as unknown as Ai;
+    const transcript = new Promise<string>((resolve, reject) => {
+      const session = new WorkersAIWhisperTranscriber(ai, "hi-IN").createSession({
+        onUtterance: resolve,
+        onFatalError: reject,
+      });
+      session.feed(new Int16Array(3_200).fill(12_000).buffer);
+      session.feed(new Int16Array(9_600).buffer);
+    });
+
+    await expect(transcript).resolves.toBe("मेरा हीमोग्लोबिन कितना है?");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].model).toBe("@cf/openai/whisper-large-v3-turbo");
+    expect(calls[0].input.language).toBe("hi");
+    expect(String(calls[0].input.audio)).toMatch(/^UklGR/);
   });
 
   it("drops noise-only transcripts but preserves short patient answers", () => {
