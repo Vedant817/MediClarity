@@ -5,6 +5,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import mongoose from "mongoose";
+import { isVoiceLocale, type VoiceLocale } from "../config/voice-languages.ts";
 
 const CAPABILITY_AUDIENCE = "mediclarity-voice-worker";
 const CAPABILITY_TTL_SECONDS = 120;
@@ -18,6 +19,7 @@ export interface VoiceCapabilityClaims {
   iat: number;
   exp: number;
   jti: string;
+  locale: VoiceLocale;
 }
 
 function requiredSecret(name: "VOICE_CAPABILITY_SECRET" | "VOICE_SERVICE_SECRET") {
@@ -61,7 +63,12 @@ function equalText(left: string, right: string) {
   return timingSafeEqual(leftDigest, rightDigest);
 }
 
-export function createVoiceCapability(userId: string, sessionId: string, now = new Date()) {
+export function createVoiceCapability(
+  userId: string,
+  sessionId: string,
+  locale: VoiceLocale = "en-IN",
+  now = new Date(),
+) {
   if (!userId || !sessionId) throw new Error("A user and session are required");
   const issuedAt = Math.floor(now.getTime() / 1000);
   const claims: VoiceCapabilityClaims = {
@@ -71,6 +78,7 @@ export function createVoiceCapability(userId: string, sessionId: string, now = n
     iat: issuedAt,
     exp: issuedAt + CAPABILITY_TTL_SECONDS,
     jti: randomUUID(),
+    locale,
   };
   const header = encode({ alg: "HS256", typ: "JWT" });
   const payload = encode(claims);
@@ -104,6 +112,7 @@ export function verifyVoiceCapability(token: string, now = new Date()): VoiceCap
       || typeof claims.exp !== "number" || claims.exp <= nowSeconds
       || claims.exp - claims.iat !== CAPABILITY_TTL_SECONDS
       || typeof claims.jti !== "string" || !claims.jti
+      || !isVoiceLocale(claims.locale)
     ) return null;
     return claims as VoiceCapabilityClaims;
   } catch {

@@ -18,7 +18,8 @@ test.before(() => {
 
 test("creates a short-lived capability bound to the user and session", () => {
   const now = new Date("2026-09-02T10:00:00.000Z");
-  const { token, claims } = createVoiceCapability("user_123", "session_123", now);
+  const { token, claims } = createVoiceCapability("user_123", "session_123", "hi-IN", now);
+  assert.equal(claims.locale, "hi-IN");
   assert.equal(claims.exp - claims.iat, 120);
   assert.deepEqual(verifyVoiceCapability(token, now), claims);
   assert.equal(verifyVoiceCapability(`${token.slice(0, -1)}x`, now), null);

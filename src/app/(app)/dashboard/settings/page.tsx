@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { CreditCard, Globe, Shield } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { VOICE_LANGUAGES, type PreferenceLocale } from "@/config/voice-languages";
 
-const languages = { en: "English", hi: "Hindi", es: "Spanish", ar: "Arabic", pt: "Portuguese", fr: "French", pa: "Punjabi" } as const;
+const languages = Object.fromEntries(
+  VOICE_LANGUAGES.map((language) => [language.preference, `${language.label} · ${language.nativeLabel}`]),
+) as Record<PreferenceLocale, string>;
 const regions = { GLOBAL: "Global / source-lab defaults", IN: "India deployment profile", US: "United States deployment profile", EU: "European Union deployment profile", GCC: "GCC deployment profile" } as const;
 type Preferences = { locale: keyof typeof languages; regionProfile: keyof typeof regions; dateFormat: "YYYY-MM-DD" | "DD/MM/YYYY" | "MM/DD/YYYY" };
 const defaults: Preferences = { locale: "en", regionProfile: "GLOBAL", dateFormat: "YYYY-MM-DD" };

@@ -1,6 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 
-export const SUPPORTED_LOCALES = ["en", "hi", "es", "ar", "pt", "fr", "pa"] as const;
+export const SUPPORTED_LOCALES = ["en", "hi", "pa", "bn", "ta", "te", "mr", "gu", "kn", "ml"] as const;
 export const REGION_PROFILES = ["GLOBAL", "IN", "US", "EU", "GCC"] as const;
 
 const UserPreferenceSchema = new Schema(

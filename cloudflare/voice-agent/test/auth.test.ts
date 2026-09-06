@@ -21,6 +21,7 @@ const claims: ConnectionClaims = {
   iat: 1_000,
   exp: 1_120,
   jti: "nonce_1234567890",
+  locale: "pa-IN",
 };
 
 describe("connection token verification", () => {

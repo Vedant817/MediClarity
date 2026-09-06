@@ -1,3 +1,5 @@
+import { isVoiceLocale, type VoiceLocale } from "./languages.ts";
+
 export interface ConnectionClaims {
   aud: string;
   sub: string;
@@ -5,6 +7,7 @@ export interface ConnectionClaims {
   iat: number;
   exp: number;
   jti: string;
+  locale: VoiceLocale;
 }
 
 const encoder = new TextEncoder();
@@ -29,7 +32,8 @@ function isClaims(value: unknown): value is ConnectionClaims {
     typeof claims.sid === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(claims.sid) &&
     typeof claims.iat === "number" && Number.isInteger(claims.iat) &&
     typeof claims.exp === "number" && Number.isInteger(claims.exp) &&
-    typeof claims.jti === "string" && claims.jti.length >= 16 && claims.jti.length <= 128
+    typeof claims.jti === "string" && claims.jti.length >= 16 && claims.jti.length <= 128 &&
+    isVoiceLocale(claims.locale)
   );
 }
 

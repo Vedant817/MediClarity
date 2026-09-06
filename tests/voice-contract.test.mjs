@@ -17,7 +17,7 @@ test.before(() => {
 
 test("Next capability is accepted by the Cloudflare Worker verifier", async () => {
   const now = new Date("2026-09-02T10:00:00.000Z");
-  const { token, claims } = createVoiceCapability("user_contract", "6edfde66-5ed0-4c36-8213-e85db3fdd459", now);
+  const { token, claims } = createVoiceCapability("user_contract", "6edfde66-5ed0-4c36-8213-e85db3fdd459", "pa-IN", now);
   const verified = await verifyConnectionToken(token, capabilitySecret, {
     audience: "mediclarity-voice-worker",
     now: Math.floor(now.getTime() / 1000),
