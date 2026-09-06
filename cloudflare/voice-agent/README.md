@@ -4,6 +4,7 @@ An isolated Cloudflare Worker/Durable Object voice runtime for authenticated Med
 
 - `@cloudflare/voice` for continuous speech-to-text, streaming text-to-speech, automatic interruption/barge-in, and SQLite conversation persistence.
 - Workers AI `@cf/meta/llama-3.3-70b-instruct-fp8-fast` for responses.
+- Native Cloudflare Flux/Aura speech for English and Sarvam Saaras v4/Bulbul v3 for Hindi, Punjabi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, and Malayalam.
 - `agents` and a SQLite-backed Durable Object per voice session.
 - A 120-second HS256 capability issued by the authenticated Next.js application.
 - A separately signed server-to-server request to load current patient context. The browser cannot supply or override patient data.
@@ -17,8 +18,8 @@ An isolated Cloudflare Worker/Durable Object voice runtime for authenticated Med
 3. The browser connects to the Worker agent named `patient-voice-agent`, using `sessionId` as the Durable Object name and the capability as the `token` query parameter.
 4. The Worker checks the exact browser `Origin`, verifies the HS256 signature/audience/lifetime, and requires the URL instance name to equal the signed `sid`.
 5. Before routing the WebSocket, the Worker calls Next.js `POST /api/voice/context` with a separate HMAC service signature. The capability remains ephemeral and is stripped before the request reaches the Durable Object.
-6. The Durable Object stores its bound identity and bounded, normalized context in a private SQLite table so calls survive hibernation. It does not broadcast this data through Agent state. `withVoice` stores completed user/assistant turns in Durable Object SQLite.
-7. Flux STT detects speech start. `withVoice` cancels active speech/LLM work, and `context.signal` is forwarded to Workers AI so a patient can naturally interrupt the answer.
+6. The Durable Object stores its bound identity and bounded, normalized context in a private SQLite table so active calls survive hibernation. It does not broadcast this data through Agent state, and the context snapshot is deleted when the call ends. `withVoice` stores completed user/assistant turns in Durable Object SQLite.
+7. Browser echo cancellation, noise suppression, and automatic gain control run before audio leaves the device. Flux or the Indic adaptive-VAD transcriber detects speech; `withVoice` cancels active speech/LLM work, and `context.signal` is forwarded to Workers AI so a patient can naturally interrupt the answer.
 
 ## Configuration
 
@@ -37,6 +38,7 @@ Set two different random secrets of at least 32 UTF-8 bytes. Their values must m
 ```sh
 npx wrangler secret put VOICE_CAPABILITY_SECRET
 npx wrangler secret put VOICE_SERVICE_SECRET
+npx wrangler secret put SARVAM_API_KEY
 ```
 
 For local development, copy `.dev.vars.example` to `.dev.vars`. Never commit `.dev.vars`.
@@ -98,4 +100,4 @@ npm test
 npx wrangler deploy --dry-run
 ```
 
-For local end-to-end use, run Next.js at `NEXT_ORIGIN`, configure matching secrets in both processes, then run `npm run dev`. A real Cloudflare account with Workers AI access is required to exercise Flux STT, Llama 3.3, Aura TTS, WebSockets, and Durable Object persistence.
+For local end-to-end use, run Next.js at `NEXT_ORIGIN`, configure matching secrets in both processes, then run `npm run dev`. Set `VOICE_INDIC_ENABLED=true` in Next.js only after the Worker has `SARVAM_API_KEY`. A real Cloudflare account with Workers AI access is required to exercise Flux STT, Llama 3.3, Aura TTS, WebSockets, and Durable Object persistence; Indic speech additionally requires Sarvam access.

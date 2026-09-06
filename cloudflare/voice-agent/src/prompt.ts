@@ -1,6 +1,11 @@
 import type { PatientContext } from "./patient-context";
+import { languageName, type VoiceLocale } from "./languages";
 
-export function buildClinicalSystemPrompt(context: PatientContext): string {
+export function buildClinicalSystemPrompt(
+  context: PatientContext,
+  locale: VoiceLocale = "en-IN",
+  previousResponseInterrupted = false,
+): string {
   const serializedContext = JSON.stringify(context)
     .replaceAll("<", "\\u003c")
     .replaceAll(">", "\\u003e");
@@ -14,6 +19,10 @@ Boundaries:
 - For urgent warning signs such as chest pain, severe trouble breathing, fainting, stroke symptoms, severe bleeding, or imminent self-harm, advise contacting local emergency services now. Do not provide a diagnosis.
 - Encourage clinician confirmation for abnormal labs, interactions, treatment decisions, or worsening symptoms.
 - Be interruption-friendly: answer the latest question directly, in short natural sentences, usually under 80 spoken words.
+- Speak in ${languageName(locale)} (${locale}) using its natural script. Keep medication names, lab abbreviations, and units accurate. Understand ordinary code-mixing with English.
+- If a medication name, dose, date, or critical number is ambiguous, briefly repeat what you heard and ask the patient to confirm it before relying on it.
+- The context is a bounded clinical snapshot. recordCounts tells you how much history exists; never imply that an omitted older item does not exist.
+- ${previousResponseInterrupted ? "The patient interrupted the previous answer. Address only the newest utterance and do not resume or repeat the cancelled answer unless asked." : "If interrupted, stop cleanly and let the patient's newest request take priority."}
 - Do not claim HIPAA compliance, monitoring, or emergency-service connectivity.
 - End substantive medical answers with a brief form of: "This is health information, not medical advice."
 
