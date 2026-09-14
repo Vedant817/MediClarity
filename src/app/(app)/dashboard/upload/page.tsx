@@ -163,7 +163,7 @@ export default function UploadReportPage() {
                             />
                             <label htmlFor="file-upload" className="cursor-pointer">
                                 <div className="flex flex-col items-center justify-center space-y-2">
-                                    <Upload className="h-10 w-10 text-gray-400" />
+                                    <Upload className="h-10 w-10 text-slate-400" />
                                     <p className="text-sm font-medium">Drag and drop or click to upload</p>
                                     <p className="text-xs text-gray-500">Support for images and PDF files</p>
                                 </div>

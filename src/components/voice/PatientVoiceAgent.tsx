@@ -321,11 +321,11 @@ export default function PatientVoiceAgent() {
 
   return (
     <section className="mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8" aria-labelledby="voice-agent-title">
-      <div className="overflow-hidden rounded-[2rem] border border-fuchsia-200/70 bg-white shadow-[0_28px_90px_-45px_rgba(192,38,211,0.45)]">
-        <header className="border-b border-fuchsia-100 bg-[radial-gradient(circle_at_top_right,_rgba(244,114,182,0.2),_transparent_42%),linear-gradient(135deg,#fff_0%,#fdf4ff_48%,#fff7fb_100%)] px-5 py-6 sm:px-8">
+      <div className="overflow-hidden rounded-[2rem] border border-teal-200/70 bg-white shadow-[0_28px_90px_-45px_rgba(13,148,136,0.45)]">
+        <header className="border-b border-teal-100 bg-[radial-gradient(circle_at_top_right,_rgba(45,212,191,0.2),_transparent_42%),linear-gradient(135deg,#fff_0%,#f0fdfa_48%,#ecfdf5_100%)] px-5 py-6 sm:px-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-2xl">
-              <div className="mb-3 flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-fuchsia-700">
+              <div className="mb-3 flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-700">
                 <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                 Patient context · voice channel
               </div>
@@ -338,7 +338,7 @@ export default function PatientVoiceAgent() {
             </div>
             <div className="flex flex-col items-end gap-2">
               <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-                <Languages className="h-4 w-4 text-fuchsia-700" aria-hidden="true" />
+                <Languages className="h-4 w-4 text-teal-700" aria-hidden="true" />
                 Spoken language
                 <select
                   value={selectedLocale}
@@ -348,7 +348,7 @@ export default function PatientVoiceAgent() {
                     setSessionError(null);
                   }}
                   disabled={active || isLoadingSession}
-                  className="rounded-lg border border-fuchsia-200 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300 disabled:opacity-60"
+                  className="rounded-lg border border-teal-200 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-teal-300 disabled:opacity-60"
                 >
                   {VOICE_LANGUAGES.map((language) => (
                     <option key={language.locale} value={language.locale}>{language.label} · {language.nativeLabel}</option>
@@ -356,19 +356,19 @@ export default function PatientVoiceAgent() {
                 </select>
               </label>
               <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-                <Wind className="h-4 w-4 text-fuchsia-700" aria-hidden="true" />
+                <Wind className="h-4 w-4 text-teal-700" aria-hidden="true" />
                 Room noise
                 <select
                   value={noiseMode}
                   onChange={(event) => setNoiseMode(event.target.value as "standard" | "noisy")}
                   disabled={active || isLoadingSession}
-                  className="rounded-lg border border-fuchsia-200 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300 disabled:opacity-60"
+                  className="rounded-lg border border-teal-200 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-teal-300 disabled:opacity-60"
                 >
                   <option value="standard">Standard</option>
                   <option value="noisy">Noisy room</option>
                 </select>
               </label>
-              <div className="flex items-center gap-2 rounded-full border border-fuchsia-200 bg-white/80 px-3 py-2 font-mono text-[11px] text-slate-600 shadow-sm">
+              <div className="flex items-center gap-2 rounded-full border border-teal-200 bg-white/80 px-3 py-2 font-mono text-[11px] text-slate-600 shadow-sm">
                 <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-500" : "bg-slate-300"}`} aria-hidden="true" />
                 {connected ? `Connected · ${selectedLanguage.label}` : "Private until you start"}
               </div>
@@ -377,26 +377,26 @@ export default function PatientVoiceAgent() {
         </header>
 
         <div className="grid lg:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)]">
-          <div className="relative flex min-h-[500px] flex-col items-center justify-center overflow-hidden border-b border-fuchsia-100 px-5 py-10 lg:border-b-0 lg:border-r sm:px-8">
-            <div className="pointer-events-none absolute inset-0 opacity-70 [background-image:linear-gradient(to_right,rgba(217,70,239,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(217,70,239,0.06)_1px,transparent_1px)] [background-size:28px_28px]" aria-hidden="true" />
+          <div className="relative flex min-h-[500px] flex-col items-center justify-center overflow-hidden border-b border-teal-100 px-5 py-10 lg:border-b-0 lg:border-r sm:px-8">
+            <div className="pointer-events-none absolute inset-0 opacity-70 [background-image:linear-gradient(to_right,rgba(20,184,166,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(20,184,166,0.06)_1px,transparent_1px)] [background-size:28px_28px]" aria-hidden="true" />
 
             <div className="relative flex flex-col items-center text-center">
               <div
                 className={`relative grid h-52 w-52 place-items-center rounded-full border sm:h-60 sm:w-60 ${
-                  active ? "border-fuchsia-300 bg-fuchsia-50" : "border-slate-200 bg-slate-50"
+                  active ? "border-teal-300 bg-teal-50" : "border-slate-200 bg-slate-50"
                 }`}
                 aria-label={`${currentState.label}. Microphone level ${Math.round(audioLevel * 100)} percent.`}
               >
                 {active && (
-                  <span className="absolute inset-3 rounded-full border border-fuchsia-300/70 motion-safe:animate-ping" aria-hidden="true" />
+                  <span className="absolute inset-3 rounded-full border border-teal-300/70 motion-safe:animate-ping" aria-hidden="true" />
                 )}
-                <div className="relative flex h-28 w-28 items-center justify-center gap-1 rounded-full bg-slate-950 px-5 shadow-xl shadow-fuchsia-300/40 sm:h-32 sm:w-32">
+                <div className="relative flex h-28 w-28 items-center justify-center gap-1 rounded-full bg-[#102c2a] px-5 shadow-xl shadow-teal-300/40 sm:h-32 sm:w-32">
                   {waveform.map((scale, index) => {
                     const liveHeight = active ? Math.max(18, 28 + audioLevel * 60 * scale) : 18 + scale * 16;
                     return (
                       <span
                         key={index}
-                        className={`w-1 rounded-full bg-gradient-to-t from-fuchsia-600 to-pink-300 transition-[height] duration-100 motion-reduce:transition-none ${
+                        className={`w-1 rounded-full bg-gradient-to-t from-teal-700 to-teal-300 transition-[height] duration-100 motion-reduce:transition-none ${
                           effectiveStatus === "thinking" ? "motion-safe:animate-pulse" : ""
                         }`}
                         style={{ height: `${liveHeight}px`, transitionDelay: `${index * 16}ms` }}
@@ -405,7 +405,7 @@ export default function PatientVoiceAgent() {
                     );
                   })}
                 </div>
-                <span className="absolute bottom-4 rounded-full bg-white px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-widest text-fuchsia-800 shadow-sm">
+                <span className="absolute bottom-4 rounded-full bg-white px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-widest text-teal-800 shadow-sm">
                   {effectiveStatus}
                 </span>
               </div>
@@ -417,7 +417,7 @@ export default function PatientVoiceAgent() {
                 {!active ? (
                   <Button
                     size="lg"
-                    className="h-12 rounded-full bg-fuchsia-700 px-6 text-white shadow-lg shadow-fuchsia-200 hover:bg-fuchsia-800"
+                    className="h-12 rounded-full bg-teal-700 px-6 text-white shadow-lg shadow-teal-200 hover:bg-teal-800"
                     onClick={() => void beginCall()}
                     disabled={isLoadingSession || startRequested}
                   >
@@ -438,7 +438,7 @@ export default function PatientVoiceAgent() {
                     </Button>
                     <Button
                       size="lg"
-                      className="h-12 rounded-full bg-slate-950 px-5 text-white hover:bg-slate-800"
+                      className="h-12 rounded-full bg-[#102c2a] px-5 text-white hover:bg-[#0b766e]"
                       onClick={finishCall}
                     >
                       <CircleStop /> End session
@@ -471,14 +471,14 @@ export default function PatientVoiceAgent() {
                 <h2 className="font-semibold text-slate-900">Conversation</h2>
                 <p className="text-xs text-slate-500">Voice and typed questions appear here.</p>
               </div>
-              <Volume2 className={`h-5 w-5 ${effectiveStatus === "speaking" ? "text-fuchsia-700" : "text-slate-300"}`} aria-hidden="true" />
+              <Volume2 className={`h-5 w-5 ${effectiveStatus === "speaking" ? "text-teal-700" : "text-slate-300"}`} aria-hidden="true" />
             </div>
 
             <ScrollArea className="h-[340px] flex-1 px-5 py-5" aria-label="Voice agent transcript" role="log" aria-live="polite">
               {transcript.length === 0 && !interimTranscript ? (
                 <div className="grid h-full min-h-56 place-items-center text-center">
                   <div className="max-w-xs">
-                    <Bot className="mx-auto h-8 w-8 text-fuchsia-400" aria-hidden="true" />
+                    <Bot className="mx-auto h-8 w-8 text-teal-400" aria-hidden="true" />
                     <p className="mt-3 text-sm font-medium text-slate-700">No messages yet</p>
                     <p className="mt-1 text-xs leading-5 text-slate-500">Try “Explain my latest lab results in simple language.”</p>
                   </div>
@@ -491,10 +491,10 @@ export default function PatientVoiceAgent() {
                       <div key={`${message.timestamp}-${index}`} className={`flex ${fromPatient ? "justify-end" : "justify-start"}`}>
                         <div lang={selectedLocale} className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${
                           fromPatient
-                            ? "rounded-br-sm bg-fuchsia-700 text-white"
+                            ? "rounded-br-sm bg-teal-700 text-white"
                             : "rounded-bl-sm border border-slate-200 bg-white text-slate-700 shadow-sm"
                         }`}>
-                          <p className={`mb-1 font-mono text-[9px] font-semibold uppercase tracking-widest ${fromPatient ? "text-fuchsia-100" : "text-fuchsia-700"}`}>
+                          <p className={`mb-1 font-mono text-[9px] font-semibold uppercase tracking-widest ${fromPatient ? "text-teal-100" : "text-teal-700"}`}>
                             {fromPatient ? "You" : "MediClarity AI"}
                           </p>
                           {message.text}
@@ -504,8 +504,8 @@ export default function PatientVoiceAgent() {
                   })}
                   {interimTranscript && (
                     <div className="flex justify-end" aria-live="off">
-                      <div className="max-w-[88%] rounded-2xl rounded-br-sm border border-dashed border-fuchsia-300 bg-fuchsia-50 px-4 py-3 text-sm italic text-fuchsia-900">
-                        <p className="mb-1 font-mono text-[9px] font-semibold uppercase tracking-widest text-fuchsia-600">Hearing now</p>
+                      <div className="max-w-[88%] rounded-2xl rounded-br-sm border border-dashed border-teal-300 bg-teal-50 px-4 py-3 text-sm italic text-teal-900">
+                        <p className="mb-1 font-mono text-[9px] font-semibold uppercase tracking-widest text-teal-700">Hearing now</p>
                         {interimTranscript}
                       </div>
                     </div>
@@ -525,9 +525,9 @@ export default function PatientVoiceAgent() {
                   placeholder={connected ? "Type instead of speaking…" : "Connect to type a question"}
                   disabled={!connected}
                   maxLength={1_000}
-                  className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-200 disabled:bg-slate-100"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-200 disabled:bg-slate-100"
                 />
-                <Button type="submit" size="icon" className="rounded-xl bg-fuchsia-700 hover:bg-fuchsia-800" disabled={!connected || !text.trim()} aria-label="Send typed question">
+                <Button type="submit" size="icon" className="rounded-xl bg-teal-700 hover:bg-teal-800" disabled={!connected || !text.trim()} aria-label="Send typed question">
                   <Send />
                 </Button>
               </div>
@@ -549,9 +549,9 @@ export default function PatientVoiceAgent() {
           </div>
         )}
 
-        <footer className="grid gap-3 border-t border-fuchsia-100 bg-white px-5 py-5 sm:grid-cols-2 sm:px-8">
-          <div className="flex gap-3 rounded-xl bg-fuchsia-50 p-3 text-xs leading-5 text-fuchsia-950">
-            <HeartPulse className="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-700" aria-hidden="true" />
+        <footer className="grid gap-3 border-t border-teal-100 bg-white px-5 py-5 sm:grid-cols-2 sm:px-8">
+          <div className="flex gap-3 rounded-xl bg-teal-50 p-3 text-xs leading-5 text-teal-950">
+            <HeartPulse className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" aria-hidden="true" />
             <p><strong>AI health-information assistant.</strong> It may make mistakes and does not replace a doctor, diagnosis, or medical advice.</p>
           </div>
           <div className="flex gap-3 rounded-xl bg-rose-50 p-3 text-xs leading-5 text-rose-950">

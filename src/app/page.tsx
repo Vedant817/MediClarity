@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Check, CircleDashed, FileJson2, FileText, FlaskConical, Globe2, LineChart, ScanLine, Share2, ShieldCheck } from "lucide-react";
 import { BillingButton } from "@/components/BillingButton";
 import { Button } from "@/components/ui/button";
-import { formatUsd, PRODUCT_CATALOG } from "@/config/product";
+import { getPlanDisplay } from "@/config/pricing-display";
 
 const pipeline = [
   { label: "Source", value: "CBC-report.pdf", note: "original retained", icon: FileText },
@@ -18,17 +18,13 @@ const productLayers = [
   { title: "Use the same pipeline by API", description: "Labs and clinics send a document and receive normalized rows plus standards-ready observations.", icon: FlaskConical },
 ];
 
-const plans = [
-  { name: PRODUCT_CATALOG.free.name, price: formatUsd(PRODUCT_CATALOG.free.monthlyPriceCents), suffix: "forever", description: "Understand an occasional report.", features: [`${PRODUCT_CATALOG.free.maxReportsPerMonth} reports each month`, "Patient-friendly summary", "Report Q&A"], action: "free" as const },
-  { name: PRODUCT_CATALOG.pro.name, price: formatUsd(PRODUCT_CATALOG.pro.monthlyPriceCents), suffix: "per month", description: "Build a longitudinal health record.", features: ["Unlimited reports", "Trends and normalized results", "Share, medications, and education"], action: "pro" as const },
-  { name: PRODUCT_CATALOG.lab.name, price: formatUsd(PRODUCT_CATALOG.lab.monthlyPriceCents), suffix: "per month", description: "Structure reports for your product or lab.", features: ["API keys and usage dashboard", "Lab rows and FHIR output", `${formatUsd(PRODUCT_CATALOG.lab.usagePriceCents)} per processed report`], action: "lab" as const },
-];
+const plans = getPlanDisplay();
 
 const comingSoon = ["Wearable integrations", "Predictive analytics", "E-prescribing", "Custom telehealth video", "Emergency response"];
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[#f7f3e9] text-[#102c2a] selection:bg-[#ff735c]/30">
+    <main className="min-h-screen bg-[#f7f3e9] text-[#102c2a] selection:bg-[#0b766e]/25">
       <a href="#main-content" className="sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:not-sr-only focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:font-semibold focus:text-[#102c2a] focus:shadow-lg">
         Skip to main content
       </a>
@@ -66,7 +62,7 @@ export default function Home() {
               <Button size="lg" asChild className="bg-[#0b766e] text-white hover:bg-[#075e58]"><Link href="/signup">Start with 3 free reports <ArrowRight aria-hidden="true" /></Link></Button>
               <Button size="lg" variant="outline" asChild className="border-[#102c2a]/30 bg-transparent"><Link href="#product">See the data pipeline</Link></Button>
             </div>
-            <div className="mt-7 flex max-w-xl items-start gap-3 border-l-2 border-[#ff735c] pl-4 text-sm leading-6 text-[#526864]">
+            <div className="mt-7 flex max-w-xl items-start gap-3 border-l-2 border-[#0b766e] pl-4 text-sm leading-6 text-[#526864]">
               <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[#0b766e]" aria-hidden="true" />
               <p>For information only, not medical advice or diagnosis. Always discuss results and urgent symptoms with a qualified clinician.</p>
             </div>
@@ -86,7 +82,7 @@ export default function Home() {
             <div className="grid grid-cols-3 border-t border-[#102c2a]/15 bg-[#102c2a] px-5 py-4 text-[#f7f3e9]">
               <div><p className="font-mono text-[10px] uppercase text-[#9fc8bf]">Test</p><p className="text-sm">Hemoglobin</p></div>
               <div><p className="font-mono text-[10px] uppercase text-[#9fc8bf]">Value</p><p className="text-sm">13.2 g/dL</p></div>
-              <div><p className="font-mono text-[10px] uppercase text-[#9fc8bf]">Flag</p><p className="text-sm text-[#ff9b88]">Source range</p></div>
+              <div><p className="font-mono text-[10px] uppercase text-[#9fc8bf]">Flag</p><p className="text-sm text-[#5eead4]">Source range</p></div>
             </div>
           </div>
         </div>
@@ -127,14 +123,14 @@ export default function Home() {
       <section id="boundaries" className="border-y border-[#102c2a]/15 bg-[#102c2a] text-[#f7f3e9]">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 py-16 lg:grid-cols-[.8fr_1.2fr] lg:px-8">
           <div><p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-[#9fc8bf]">Deliberate boundaries</p><h2 className="mt-4 text-4xl font-semibold tracking-tight">Useful now. Careful about what comes next.</h2><p className="mt-5 max-w-lg leading-7 text-[#c7d8d4]">MediClarity does not diagnose, prescribe, replace emergency services, or claim regulatory certifications that have not been independently established.</p></div>
-          <div><p className="mb-4 font-mono text-xs uppercase tracking-widest text-[#9fc8bf]">Coming soon—not active product capabilities</p><div className="grid gap-3 sm:grid-cols-2">{comingSoon.map((item) => <div key={item} className="flex items-center gap-3 rounded-lg border border-[#f7f3e9]/15 px-4 py-3 text-sm"><CircleDashed className="size-4 text-[#ff9b88]" aria-hidden="true" />{item}</div>)}</div></div>
+          <div><p className="mb-4 font-mono text-xs uppercase tracking-widest text-[#9fc8bf]">Coming soon—not active product capabilities</p><div className="grid gap-3 sm:grid-cols-2">{comingSoon.map((item) => <div key={item} className="flex items-center gap-3 rounded-lg border border-[#f7f3e9]/15 px-4 py-3 text-sm"><CircleDashed className="size-4 text-[#5eead4]" aria-hidden="true" />{item}</div>)}</div></div>
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-5 py-20 lg:px-8">
-        <div className="rounded-2xl bg-[#ff735c] p-8 text-[#102c2a] md:flex md:items-end md:justify-between md:p-12">
-          <div className="max-w-2xl"><p className="font-mono text-xs font-semibold uppercase tracking-widest">Start with the source</p><h2 className="mt-4 text-4xl font-semibold tracking-tight">Bring the report you already have.</h2><p className="mt-4 leading-7">Upload a PDF or photo. Keep the original beside every explanation and structured result.</p></div>
-          <Button size="lg" asChild className="mt-7 bg-[#102c2a] text-[#f7f3e9] hover:bg-[#0b766e] md:mt-0"><Link href="/signup">Upload a report <ArrowRight aria-hidden="true" /></Link></Button>
+        <div className="rounded-2xl bg-[#0b766e] p-8 text-[#f7f3e9] md:flex md:items-end md:justify-between md:p-12">
+          <div className="max-w-2xl"><p className="font-mono text-xs font-semibold uppercase tracking-widest text-[#9fc8bf]">Start with the source</p><h2 className="mt-4 text-4xl font-semibold tracking-tight">Bring the report you already have.</h2><p className="mt-4 leading-7 text-[#dcece7]">Upload a PDF or photo. Keep the original beside every explanation and structured result.</p></div>
+          <Button size="lg" asChild className="mt-7 bg-[#f7f3e9] text-[#102c2a] hover:bg-white md:mt-0"><Link href="/signup">Upload a report <ArrowRight aria-hidden="true" /></Link></Button>
         </div>
       </section>
 
