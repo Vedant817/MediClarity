@@ -7,6 +7,7 @@ import { Braces, CalendarIcon, Copy, Download, FileText, Share2 } from "lucide-r
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import Markdown from 'react-markdown'
+import { toPlainExcerpt } from "@/lib/summary-excerpt"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -135,7 +136,7 @@ export default function ReportsPage() {
                                         </CardHeader>
                                         <CardContent className="pb-2">
                                             <div className="text-sm text-muted-foreground line-clamp-2">
-                                                <Markdown>{report.summary}</Markdown>
+                                                {toPlainExcerpt(report.summary)}
                                             </div>
                                         </CardContent>
                                         <CardFooter className="text-xs text-muted-foreground pt-0 flex items-center">

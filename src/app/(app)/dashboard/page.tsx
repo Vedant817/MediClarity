@@ -14,6 +14,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { toPlainExcerpt } from "@/lib/summary-excerpt";
 
 type Report = {
   _id: string;
@@ -257,7 +258,7 @@ export default function DashboardPage() {
                     </Badge>
                   </div>
                   <p className="mt-2 line-clamp-2 text-sm text-gray-700">
-                    {report.summary}
+                    {toPlainExcerpt(report.summary)}
                   </p>
                 </div>
               ))}

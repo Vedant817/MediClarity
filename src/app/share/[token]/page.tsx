@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import { headers } from "next/headers";
 import { after } from "next/server";
+import Markdown from "react-markdown";
 import { readPublicShare, writeAuditLog } from "@/lib/share";
 
 export default async function SharedReportPage({ params }: { params: Promise<{ token: string }> }) {
@@ -56,7 +57,9 @@ export default async function SharedReportPage({ params }: { params: Promise<{ t
 
         <section className="border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold">Plain-language summary</h2>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">{data.report.summary}</p>
+          <div className="mt-3 text-sm leading-7 text-slate-700 [&_h1]:mt-4 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mt-4 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_p]:mt-2 [&_table]:mt-3 [&_table]:w-full [&_td]:border [&_td]:border-slate-200 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-slate-200 [&_th]:bg-slate-50 [&_th]:px-2 [&_th]:py-1">
+            <Markdown>{data.report.summary}</Markdown>
+          </div>
         </section>
 
         <p className="border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">

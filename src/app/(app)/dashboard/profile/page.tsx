@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { toPlainExcerpt } from "@/lib/summary-excerpt";
 
 type RecentReport = {
   _id: string;
@@ -246,7 +247,7 @@ export default function ProfilePage() {
                       Report · {formatDate(report.createdAt)}
                     </p>
                     <p className="mt-1 line-clamp-2 text-sm text-gray-500">
-                      {report.summary}
+                      {toPlainExcerpt(report.summary)}
                     </p>
                   </li>
                 ))}
