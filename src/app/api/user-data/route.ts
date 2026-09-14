@@ -64,7 +64,7 @@ export async function GET() {
         totalAppointments: appointments.length,
         upcomingAppointments: upcomingAppointments.length,
         completedAppointments: appointments.filter(
-          (appointment) => appointment.status === "completed",
+          (appointment) => appointment.status === "attended" || appointment.status === "completed",
         ).length,
       },
       latestAbnormalLabs: JSON.parse(JSON.stringify(latestAbnormalLabs)),

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { isCanonicalAppointmentDate, isCanonicalAppointmentTime, normalizeAppointmentTime } from "@/lib/appointment-slot";
+import { APPOINTMENT_STATUSES } from "@/lib/appointments";
 import { appointmentTypeIds } from "@/lib/data";
 
 const AppointmentSchema = new mongoose.Schema({
@@ -19,7 +20,7 @@ const AppointmentSchema = new mongoose.Schema({
   },
   reason: { type: String, required: true },
   preVisitRequirements: { type: [String], default: [] },
-  status: { type: String, default: "scheduled" },
+  status: { type: String, default: "scheduled", enum: [...APPOINTMENT_STATUSES] },
   reminderSent: { type: Boolean, default: false },
   reminderSentAt: { type: Date },
   followUpSent: { type: Boolean, default: false },

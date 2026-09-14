@@ -9,7 +9,7 @@ import { Calendar, Stethoscope } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useUser } from '@clerk/nextjs';
-import { cancelAppointment, getAppointments } from '@/actions/appointment';
+import { cancelAppointment, getAppointments, updateAppointmentStatus } from '@/actions/appointment';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -107,14 +107,33 @@ export default function HealthTimeline() {
         }
     };
 
+    const handleOutcome = async (appointmentId: string, status: 'attended' | 'unattended') => {
+        const result = await updateAppointmentStatus(appointmentId, status);
+        if (result.error) {
+            toast.error(result.error);
+        } else {
+            toast.success(result.message ?? "Appointment updated successfully");
+            fetchAppointments();
+        }
+    };
+
+    const isPastVisit = (date: string) => {
+        const today = new Date().toISOString().split("T")[0];
+        return date < today;
+    };
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'scheduled':
-                return <Badge variant="default">Scheduled</Badge>;
-            case 'completed':
-                return <Badge variant="secondary">Completed</Badge>;
+                return <Badge variant="secondary">Scheduled</Badge>;
+            case 'attended':
+                return <Badge variant="default">Attended</Badge>;
+            case 'unattended':
+                return <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">Unattended</Badge>;
             case 'cancelled':
                 return <Badge variant="destructive">Cancelled</Badge>;
+            case 'completed':
+                return <Badge variant="secondary">Completed</Badge>;
             default:
                 return <Badge>{status}</Badge>;
         }
@@ -153,6 +172,31 @@ export default function HealthTimeline() {
                                         <span>{event.description}</span>
                                     </div>
                                     <div className="flex justify-end mt-4 space-x-2">
+                                        {event.status === 'scheduled' && isPastVisit(event.date) && (
+                                            <p className="mr-auto self-center text-xs text-amber-800">
+                                                This visit date has passed — record what happened.
+                                            </p>
+                                        )}
+                                        {event.status === 'scheduled' && isPastVisit(event.date) && (
+                                            <>
+                                                <Button
+                                                    variant="default"
+                                                    size="sm"
+                                                    className='cursor-pointer'
+                                                    onClick={() => handleOutcome(event.id, 'attended')}
+                                                >
+                                                    Mark attended
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className='cursor-pointer border-amber-300 text-amber-800 hover:bg-amber-50'
+                                                    onClick={() => handleOutcome(event.id, 'unattended')}
+                                                >
+                                                    Mark unattended
+                                                </Button>
+                                            </>
+                                        )}
                                         {event.status === 'scheduled' && (
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>

@@ -7,6 +7,7 @@ import Appointment from '@/models/appointment';
 import { isCanonicalAppointmentDate, isCanonicalAppointmentTime, normalizeAppointmentTime } from '@/lib/appointment-slot';
 import { auth } from '@clerk/nextjs/server';
 import { getAvailability } from '@/lib/availability';
+import { canTransitionAppointmentStatus, PATIENT_SETTABLE_STATUSES } from '@/lib/appointments';
 import { appointmentTypeIds } from '@/lib/data';
 
 const appointmentSchema = z.object({
@@ -68,7 +69,22 @@ export async function createAppointment(prevState: any, formData: FormData) {
 }
 
 export async function cancelAppointment(appointmentId: string) {
+    return updateAppointmentStatus(appointmentId, 'cancelled');
+}
+
+/**
+ * Record what happened with a visit: attended, cancelled, or unattended.
+ * Only a currently-scheduled visit can transition; terminal visits are
+ * immutable. Cancelling or marking unattended releases the provider slot
+ * (the uniqueness index only covers scheduled visits).
+ */
+export async function updateAppointmentStatus(appointmentId: string, status: string) {
     try {
+        const parsed = z.enum(PATIENT_SETTABLE_STATUSES).safeParse(status);
+        if (!parsed.success) {
+            return { error: 'Invalid appointment status. Use attended, cancelled, or unattended.' };
+        }
+
         const { userId } = await auth();
         if (!userId) return { error: 'User not authenticated' };
 
@@ -79,14 +95,23 @@ export async function cancelAppointment(appointmentId: string) {
             return { error: 'Appointment not found' };
         }
 
-        appointment.status = 'cancelled';
+        if (!canTransitionAppointmentStatus(appointment.status, parsed.data)) {
+            return { error: 'Only scheduled visits can be updated. This visit already has an outcome.' };
+        }
+
+        appointment.status = parsed.data;
         await appointment.save();
 
         revalidatePath('/appointments');
-        return { success: true };
+        const labels: Record<string, string> = {
+            attended: 'marked as attended',
+            cancelled: 'cancelled',
+            unattended: 'marked as unattended',
+        };
+        return { success: true, message: `Appointment ${labels[parsed.data] ?? 'updated'} successfully` };
     } catch (error) {
-        console.error('Cancellation error:', error);
-        return { error: 'Failed to cancel appointment' };
+        console.error('Appointment status update error:', error);
+        return { error: 'Failed to update appointment' };
     }
 }
 
