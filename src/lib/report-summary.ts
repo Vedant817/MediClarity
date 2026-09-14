@@ -1,4 +1,4 @@
-import { getLLM } from "@/lib/llm";
+import { getLLM, invokeWithRetry } from "@/lib/llm";
 import { llmMessageText } from "@/lib/lab-extraction";
 
 const patientFriendlyPrompt = (text: string) => `
@@ -17,7 +17,7 @@ Report content:
 `;
 
 export async function summarizeReport(text: string): Promise<string> {
-  const message = await getLLM("chat").invoke(patientFriendlyPrompt(text));
+  const message = await invokeWithRetry(() => getLLM("summary").invoke(patientFriendlyPrompt(text)));
   const summary = llmMessageText(message).trim();
   if (!summary) throw new Error("The model returned an empty summary");
   return summary;

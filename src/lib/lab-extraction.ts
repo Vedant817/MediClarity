@@ -1,4 +1,4 @@
-import { getLLM } from "@/lib/llm";
+import { getLLM, invokeWithRetry } from "@/lib/llm";
 import { extractedLabsSchema, parseJsonArray, type ExtractedLab } from "@/lib/labs";
 
 export type LabExtractionMetadata = {
@@ -49,11 +49,10 @@ export async function extractStructuredLabs(
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const llm = getLLM("extract");
       const prompt = attempt === 0
         ? extractionPrompt(text, metadata)
         : `${extractionPrompt(text, metadata)}\nYour previous response was invalid. Correct it and return only the JSON array. Previous response:\n${raw}`;
-      raw = messageText(await llm.invoke(prompt));
+      raw = messageText(await invokeWithRetry(() => getLLM("extract").invoke(prompt)));
       const labs = extractedLabsSchema.parse(parseJsonArray(raw));
       return labs.map((lab) => ({
         ...lab,

@@ -3,6 +3,8 @@ import { ChatOllama } from "@langchain/ollama";
 
 export type LLMTask =
   | "extract"
+  | "enrich"
+  | "summary"
   | "chat"
   | "triage"
   | "translate"
@@ -10,7 +12,9 @@ export type LLMTask =
   | "follow-up";
 
 const taskOptions: Record<LLMTask, { temperature: number; maxTokens: number }> = {
-  extract: { temperature: 0, maxTokens: 2400 },
+  extract: { temperature: 0, maxTokens: 6000 },
+  enrich: { temperature: 0, maxTokens: 3000 },
+  summary: { temperature: 0.25, maxTokens: 1500 },
   chat: { temperature: 0.25, maxTokens: 1500 },
   triage: { temperature: 0.1, maxTokens: 1200 },
   translate: { temperature: 0.1, maxTokens: 2000 },
@@ -25,6 +29,62 @@ function runtimeSetting(name: string, value: string | undefined, developmentDefa
   throw new Error(`${name} must be configured in production`);
 }
 
+/**
+ * Free-tier headroom: Groq enforces TPM/RPD limits per model, so each
+ * pipeline stage can use its own bucket. GROQ_MODEL remains the default for
+ * every task; set the optional overrides to spread load without paying more.
+ */
+export function groqModelForTask(task: LLMTask): string {
+  const base = runtimeSetting("GROQ_MODEL", process.env.GROQ_MODEL, "openai/gpt-oss-20b");
+  if (task === "extract") return process.env.GROQ_EXTRACT_MODEL?.trim() || base;
+  if (task === "enrich" || task === "summary") {
+    const override = task === "enrich" ? process.env.GROQ_ENRICH_MODEL : process.env.GROQ_SUMMARY_MODEL;
+    return override?.trim() || base;
+  }
+  return process.env.GROQ_CHAT_MODEL?.trim() || base;
+}
+
+export function isRateLimitError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return typeof error === "string" && /429|rate limit/i.test(error);
+  }
+  const candidate = error as { status?: unknown; code?: unknown; message?: unknown };
+  if (candidate.status === 429 || candidate.code === 429 || candidate.code === "rate_limit_exceeded") return true;
+  return /429|rate limit/i.test(String(candidate.message ?? ""));
+}
+
+/** Honor Groq's `retry-after` hint ("try again in 43.8s"); otherwise back off. */
+export function rateLimitDelayMs(error: unknown, attempt: number): number {
+  const text = error instanceof Error ? error.message : String(error ?? "");
+  const hinted = text.match(/try again in ([\d.]+)s/i);
+  if (hinted) return Math.min(60_000, Math.ceil(Number.parseFloat(hinted[1]) * 1000) + 500);
+  return Math.min(60_000, 4_000 * 2 ** attempt);
+}
+
+/**
+ * Invoke an LLM call, transparently retrying rate-limit (429) failures.
+ * Quality-neutral: same model, same prompt, just waits for the free-tier
+ * window instead of surfacing the error.
+ */
+export async function invokeWithRetry<T>(
+  invoke: () => Promise<T>,
+  options?: { retries?: number; sleep?: (ms: number) => Promise<void> },
+): Promise<T> {
+  const retries = options?.retries ?? 2;
+  const sleep = options?.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await invoke();
+    } catch (error) {
+      lastError = error;
+      if (!isRateLimitError(error) || attempt === retries) throw error;
+      await sleep(rateLimitDelayMs(error, attempt));
+    }
+  }
+  throw lastError;
+}
+
 export function getLLM(task: LLMTask = "chat") {
   const provider = (process.env.AI_PROVIDER || "groq").trim().toLowerCase();
   const options = taskOptions[task];
@@ -37,7 +97,7 @@ export function getLLM(task: LLMTask = "chat") {
 
     return new ChatGroq({
       apiKey,
-      model: runtimeSetting("GROQ_MODEL", process.env.GROQ_MODEL, "llama-3.1-8b-instant"),
+      model: groqModelForTask(task),
       temperature: options.temperature,
       maxTokens: options.maxTokens,
     });

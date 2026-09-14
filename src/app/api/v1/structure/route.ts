@@ -60,7 +60,7 @@ export async function POST(request: Request) {
 
     const extracted = await extractStructuredLabs(text, parsed.data);
     const labs = normalizeLabs(extracted, parsed.data.reportDate ? new Date(parsed.data.reportDate) : new Date());
-    const summaryMessage = await getLLM("chat").invoke(`Summarize the following lab report in plain language. Use only facts in the text, never diagnose, and end with "For information only, not medical advice."\n\n${text.slice(0, 120_000)}`);
+    const summaryMessage = await getLLM("summary").invoke(`Summarize the following lab report in plain language. Use only facts in the text, never diagnose, and end with "For information only, not medical advice."\n\n${text.slice(0, 120_000)}`);
 
     const idempotencyKey = request.headers.get("idempotency-key")?.slice(0, 128);
     const eventSeed = idempotencyKey || `${authorization.apiKey._id}:${authorization.apiKey.usageMonth}:${authorization.apiKey.monthlyUsage}`;

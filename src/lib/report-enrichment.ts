@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getLLM, llmContentToText } from "@/lib/llm";
+import { getLLM, invokeWithRetry, llmContentToText } from "@/lib/llm";
 
 export const extractedMedicationSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -32,7 +32,7 @@ export async function extractReportEnrichment(text: string) {
 Rules: Never invent a medicine, diagnosis, dose, or finding. Return at most 3 education cards. Education is general information only, not advice. If nothing is present, use empty arrays.
 REPORT:\n${text}`;
   try {
-    const response = await getLLM("extract").invoke(prompt);
+    const response = await invokeWithRetry(() => getLLM("enrich").invoke(prompt));
     return enrichmentSchema.parse(parseObject(llmContentToText(response.content)));
   } catch (error) {
     console.warn("Report enrichment validation failed", error instanceof Error ? error.message : error);

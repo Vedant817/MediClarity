@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     const { text, metadata } = parsed.data;
     const entitlements = await getEntitlements(userId);
     const [summaryMessage, labs, enrichment] = await Promise.all([
-      getLLM("chat").invoke(patientFriendlyPrompt(text)),
+      getLLM("summary").invoke(patientFriendlyPrompt(text)),
       extractStructuredLabs(text, metadata),
       entitlements.medications || entitlements.education
         ? extractReportEnrichment(text)
