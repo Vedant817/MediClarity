@@ -107,7 +107,7 @@ export function quotaExceededResponse(quota: { used: number; limit: number | nul
       code: "REPORT_LIMIT_REACHED",
       used: quota.used,
       limit: quota.limit,
-      upgradeUrl: "/#pricing",
+      upgradeUrl: "/pricing",
     },
     { status: 402 },
   );

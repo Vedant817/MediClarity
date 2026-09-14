@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       ),
       allow_promotion_codes: true,
       success_url: `${appUrl}/dashboard?billing=success`,
-      cancel_url: `${appUrl}/#pricing`,
+      cancel_url: `${appUrl}/pricing?billing=cancelled`,
       client_reference_id: userId,
       metadata: { clerkUserId: userId, plan: parsed.data.plan },
       subscription_data: { metadata: { clerkUserId: userId, plan: parsed.data.plan } },

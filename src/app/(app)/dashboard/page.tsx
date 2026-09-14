@@ -117,7 +117,7 @@ export default function DashboardPage() {
         {data?.plan === "free" && data.reportQuota.limit !== null && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-l-4 border-orange-500 bg-orange-50 px-4 py-3 text-sm text-orange-950">
             <span><strong>{data.reportQuota.used}/{data.reportQuota.limit}</strong> free report uploads used this month.</span>
-            <Link className="font-semibold underline underline-offset-4" href="/#pricing">Compare plans</Link>
+            <Link className="font-semibold underline underline-offset-4" href="/pricing">Compare plans</Link>
           </div>
         )}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

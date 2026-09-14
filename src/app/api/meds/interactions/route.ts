@@ -8,7 +8,7 @@ type OpenFdaLabel = { drug_interactions?: string[]; warnings?: string[]; warning
 export async function GET() {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await getEntitlements(userId)).medications) return Response.json({ error: "Medication tools require Pro", upgradeUrl: "/#pricing" }, { status: 402 });
+  if (!(await getEntitlements(userId)).medications) return Response.json({ error: "Medication tools require Pro", upgradeUrl: "/pricing" }, { status: 402 });
   await connectDB();
   const medications = await Medication.find({ userId, status: "active" }).select({ name: 1 }).limit(10).lean<Array<{ _id: unknown; name: string }>>();
 

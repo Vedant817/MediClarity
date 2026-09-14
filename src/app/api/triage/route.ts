@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await getEntitlements(userId)).triage) {
-    return Response.json({ error: "Care direction requires Pro", upgradeUrl: "/#pricing" }, { status: 402 });
+    return Response.json({ error: "Care direction requires Pro", upgradeUrl: "/pricing" }, { status: 402 });
   }
   const input = triageInputSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) return Response.json({ error: "Invalid triage input" }, { status: 400 });

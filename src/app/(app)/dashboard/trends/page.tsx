@@ -65,7 +65,7 @@ export default function TrendsPage() {
           <p className="mt-1 text-sm text-gray-600">Compare repeated measurements after transparent name and unit normalization.</p>
         </div>
 
-        {error && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertCircle className="h-4 w-4" /><span>{error}</span>{upgradeRequired && <Link className="ml-auto font-semibold underline" href="/#pricing">View plans</Link>}</div>}
+        {error && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertCircle className="h-4 w-4" /><span>{error}</span>{upgradeRequired && <Link className="ml-auto font-semibold underline" href="/pricing">View plans</Link>}</div>}
         {loading && <div className="h-64 animate-pulse rounded-xl bg-gray-100" />}
         {!loading && !error && labs.length === 0 && <div className="rounded-xl border border-dashed p-10 text-center text-gray-500">No structured lab results yet. Upload a lab report to begin.</div>}
 

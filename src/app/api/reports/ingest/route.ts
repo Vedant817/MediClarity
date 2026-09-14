@@ -125,7 +125,7 @@ export async function POST(request: Request) {
       return Response.json({
         error: "Monthly report limit reached",
         code: "REPORT_LIMIT_REACHED",
-        upgradeUrl: "/#pricing",
+        upgradeUrl: "/pricing",
       }, { status: 402 });
     }
 

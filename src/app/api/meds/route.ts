@@ -17,7 +17,7 @@ const medicationSchema = z.object({
 export async function GET() {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await requireMedicationPlan(userId))) return Response.json({ error: "Medication tools require Pro", upgradeUrl: "/#pricing" }, { status: 402 });
+  if (!(await requireMedicationPlan(userId))) return Response.json({ error: "Medication tools require Pro", upgradeUrl: "/pricing" }, { status: 402 });
   await connectDB();
   const medications = await Medication.find({ userId }).sort({ status: 1, createdAt: -1 }).lean();
   return Response.json({ medications });
@@ -26,7 +26,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await requireMedicationPlan(userId))) return Response.json({ error: "Medication tools require Pro", upgradeUrl: "/#pricing" }, { status: 402 });
+  if (!(await requireMedicationPlan(userId))) return Response.json({ error: "Medication tools require Pro", upgradeUrl: "/pricing" }, { status: 402 });
   const parsed = medicationSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid medication" }, { status: 400 });
   await connectDB();
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await requireMedicationPlan(userId))) return Response.json({ error: "Medication tools require Pro", upgradeUrl: "/#pricing" }, { status: 402 });
+  if (!(await requireMedicationPlan(userId))) return Response.json({ error: "Medication tools require Pro", upgradeUrl: "/pricing" }, { status: 402 });
   const input = z.object({ id: z.string().min(1), status: z.enum(["active", "stopped"]) }).safeParse(await request.json().catch(() => null));
   if (!input.success) return Response.json({ error: "Invalid update" }, { status: 400 });
   await connectDB();

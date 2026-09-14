@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
 const unprotectedRoute = createRouteMatcher([
     '/',
@@ -45,6 +46,17 @@ const routeAuthenticatedApi = createRouteMatcher([
 ])
 
 export default clerkMiddleware(async (auth, req) => {
+    // Signed-in visitors never sit on the marketing page: send them home
+    // to the dashboard. The route stays static for logged-out visitors.
+    if (req.nextUrl.pathname === "/") {
+        const { userId } = await auth();
+        if (userId) {
+            const dashboard = req.nextUrl.clone();
+            dashboard.pathname = "/dashboard";
+            return NextResponse.redirect(dashboard);
+        }
+        return;
+    }
     if (!unprotectedRoute(req) && !routeAuthenticatedApi(req)) await auth.protect();
 });
 

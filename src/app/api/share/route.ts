@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   const entitlements = await getEntitlements(userId);
   if (!entitlements.share) {
-    return Response.json({ error: "Sharing requires Pro", upgradeUrl: "/#pricing" }, { status: 402 });
+    return Response.json({ error: "Sharing requires Pro", upgradeUrl: "/pricing" }, { status: 402 });
   }
 
   await connectDB();

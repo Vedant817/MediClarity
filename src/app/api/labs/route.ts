@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const entitlements = await getEntitlements(userId);
   if (!entitlements.trends) {
-    return NextResponse.json({ error: "Lab trends require Pro", upgradeUrl: "/#pricing" }, { status: 402 });
+    return NextResponse.json({ error: "Lab trends require Pro", upgradeUrl: "/pricing" }, { status: 402 });
   }
 
   try {

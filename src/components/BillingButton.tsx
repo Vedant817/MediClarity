@@ -18,7 +18,7 @@ export function BillingButton({ plan, children }: { plan: "pro" | "lab"; childre
         body: JSON.stringify({ plan }),
       });
       if (response.status === 401) {
-        window.location.assign(`/login?redirect_url=${encodeURIComponent("/#pricing")}`);
+        window.location.assign(`/login?redirect_url=${encodeURIComponent("/pricing")}`);
         return;
       }
       const payload = (await response.json()) as { url?: string; error?: string };
@@ -37,7 +37,7 @@ export function BillingButton({ plan, children }: { plan: "pro" | "lab"; childre
         type="button"
         onClick={startCheckout}
         disabled={loading}
-        className="w-full bg-[#0b766e] text-white hover:bg-[#075e58] focus-visible:ring-[#ff735c]/50"
+        className="w-full bg-[#0b766e] text-white hover:bg-[#075e58] focus-visible:ring-[#0b766e]/50"
       >
         {loading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
         {loading ? "Opening secure checkout…" : children}
