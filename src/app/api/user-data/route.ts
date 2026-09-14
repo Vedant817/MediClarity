@@ -27,15 +27,25 @@ export async function GET() {
 
     const today = new Date().toISOString().split("T")[0];
 
-    const recentReports = await Report.find({ userId })
-      .select({ summary: 1, createdAt: 1 })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .lean();
-
-    const appointments = await Appointment.find({ patientId: userId })
-      .sort({ date: -1 })
-      .lean<UserAppointment[]>();
+    const [recentReports, appointments, totalReports, latestAbnormalLabs, activeMedicationCount, quota] =
+      await Promise.all([
+        Report.find({ userId })
+          .select({ summary: 1, createdAt: 1 })
+          .sort({ createdAt: -1 })
+          .limit(5)
+          .lean(),
+        Appointment.find({ patientId: userId })
+          .sort({ date: -1 })
+          .lean<UserAppointment[]>(),
+        Report.countDocuments({ userId }),
+        LabResult.find({ userId, flag: { $in: ["high", "low"] } })
+          .select({ canonicalName: 1, value: 1, unit: 1, flag: 1, date: 1 })
+          .sort({ date: -1 })
+          .limit(3)
+          .lean(),
+        Medication.countDocuments({ userId, status: "active" }),
+        getReportQuota(userId),
+      ]);
 
     const upcomingAppointments = appointments
       .filter(
@@ -44,17 +54,6 @@ export async function GET() {
       )
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 5);
-
-    const [totalReports, latestAbnormalLabs, activeMedicationCount, quota] = await Promise.all([
-      Report.countDocuments({ userId }),
-      LabResult.find({ userId, flag: { $in: ["high", "low"] } })
-        .select({ canonicalName: 1, value: 1, unit: 1, flag: 1, date: 1 })
-        .sort({ date: -1 })
-        .limit(3)
-        .lean(),
-      Medication.countDocuments({ userId, status: "active" }),
-      getReportQuota(userId),
-    ]);
 
     return NextResponse.json({
       recentReports: JSON.parse(JSON.stringify(recentReports)),
