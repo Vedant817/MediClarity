@@ -1,7 +1,5 @@
 import mongoose from "mongoose";
 
-const MONGODB_URL = process.env.MONGO_URI || "";
-
 type MongooseCache = {
   conn: typeof mongoose | null;
   promise: Promise<typeof mongoose> | null;
@@ -26,6 +24,9 @@ function getCache(): MongooseCache {
  *   stale boolean flag.
  */
 export default async function connectDB(): Promise<typeof mongoose> {
+  // Read late (not at module load) so scripts and tests can set up
+  // environment variables before the first connection attempt.
+  const MONGODB_URL = process.env.MONGO_URI || "";
   if (!MONGODB_URL) {
     throw new Error("Please define the MONGO_URI environment variable inside .env.local");
   }

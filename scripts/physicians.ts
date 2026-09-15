@@ -1,6 +1,28 @@
 import mongoose from 'mongoose';
-import connectDB from '@/lib/db';
-import Provider from '@/models/provider';
+import { readFileSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import connectDB from '../src/lib/db.ts';
+import Provider from '../src/models/provider.ts';
+
+/**
+ * Minimal .env loader for direct script execution (Next.js loads .env
+ * itself at runtime; plain node does not). No-ops when MONGO_URI is
+ * already set. Never logs values.
+ */
+function loadLocalEnv() {
+  if (process.env.MONGO_URI) return;
+  const envPath = join(dirname(fileURLToPath(import.meta.url)), '..', '.env');
+  if (!existsSync(envPath)) return;
+  for (const line of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+    const index = trimmed.indexOf('=');
+    const key = trimmed.slice(0, index).trim();
+    const value = trimmed.slice(index + 1).trim();
+    if (key && !(key in process.env)) process.env[key] = value;
+  }
+}
 
 export const providersData = [
   {
@@ -79,6 +101,7 @@ export async function seedDevelopmentProviders() {
   if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEVELOPMENT_FIXTURES !== 'true') {
     throw new Error('Development provider fixtures require ALLOW_DEVELOPMENT_FIXTURES=true and are forbidden in production');
   }
+  loadLocalEnv();
   await connectDB();
 
   try {
