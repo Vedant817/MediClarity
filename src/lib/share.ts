@@ -4,6 +4,7 @@ import connectDB from "@/lib/db";
 import { isValidShareToken } from "@/lib/share-token";
 import AuditLog, { AuditAction } from "@/models/auditLog";
 import LabResult from "@/models/labResult";
+import { resolvePublicVisualizations } from "@/lib/anatomy/share-visualize";
 import LabBrand from "@/models/labBrand";
 import Report from "@/models/report";
 import VaultShare, { type IVaultShare } from "@/models/vaultShare";
@@ -41,7 +42,11 @@ export async function readPublicShare(token: string) {
     LabBrand.findOne({ userId: share.ownerId }).select({ organizationName: 1, logoUrl: 1, accentColor: 1 }).lean(),
   ]);
   if (!report) return null;
-  return { share, report, labs, brand };
+  const visualizations = resolvePublicVisualizations(
+    { summary: report.summary, visualizations: report.visualizations },
+    labs.map((lab) => ({ canonicalName: lab.canonicalName, test: lab.test, flag: lab.flag })),
+  );
+  return { share, report, labs, brand, visualizations };
 }
 
 export async function writeAuditLog(input: {

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { getOrganModel } from "../src/lib/anatomy/registry.ts";
 import { resolveHotspot, shouldRenderMesh } from "../src/lib/anatomy/viewer.ts";
+import { ORGAN_IDS, visualizationSuggestionSchema } from "../src/lib/anatomy/types.ts";
 
 test("renders mesh only for verified organs", () => {
   assert.equal(shouldRenderMesh(getOrganModel("kidney")), true);
@@ -22,4 +23,19 @@ test("falls back to the first hotspot for unknown regions", () => {
   assert.equal(pin.key, "right-lobe");
   const empty = resolveHotspot(getOrganModel("liver"), null);
   assert.equal(empty.key, "right-lobe");
+});
+
+test("manual organ picks validate and every organ is pickable", () => {
+  for (const organId of ORGAN_IDS) {
+    const manual = {
+      organId,
+      subRegion: null,
+      relatedTo: null,
+      confidence: 0,
+      evidence: [],
+      laterality: "unknown",
+    };
+    assert.equal(visualizationSuggestionSchema.safeParse(manual).success, true, organId);
+    assert.ok(getOrganModel(organId));
+  }
 });

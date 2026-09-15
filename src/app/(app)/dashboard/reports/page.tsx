@@ -11,6 +11,8 @@ import { toPlainExcerpt } from "@/lib/summary-excerpt"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import ReportVisualize from "@/components/anatomy/ReportVisualize"
 
 type Lab = { _id: string; canonicalName: string; test: string; value: number; unit?: string; refMin?: number; refMax?: number; flag: "normal" | "high" | "low" | "unknown"; sourceLab?: string }
 type EducationCard = { _id: string; title: string; summary: string }
@@ -32,11 +34,13 @@ export default function ReportsPage() {
     const [shareEmail, setShareEmail] = useState("")
     const [shareUrl, setShareUrl] = useState("")
     const [actionError, setActionError] = useState("")
+    const [dialogTab, setDialogTab] = useState("summary")
 
     const openReport = async (report: Report) => {
         setSelectedReport(report)
         setShareUrl("")
         setActionError("")
+        setDialogTab("summary")
         const response = await fetch(`/api/reports/${encodeURIComponent(report._id)}`)
         if (response.ok) setSelectedReport((await response.json()).report)
     }
@@ -156,14 +160,14 @@ export default function ReportsPage() {
                     )}
                 </div>
             </ScrollArea>
-            <Dialog open={!!selectedReport} onOpenChange={(open) => { if (!open) setSelectedReport(null) }}>
+            <Dialog open={!!selectedReport} onOpenChange={(open) => { if (!open) { setSelectedReport(null); setDialogTab("summary") } }}>
                 <DialogContent className="w-[calc(100vw-2rem)] max-w-4xl">
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-bold mb-2">📝 Report Details</DialogTitle>
                     </DialogHeader>
                     {selectedReport && (
                         <div className="flex flex-col space-y-4 text-sm">
-                            
+
                             <a
                                 href={selectedReport.fileUrl}
                                 target="_blank"
@@ -172,10 +176,49 @@ export default function ReportsPage() {
                             >
                                 View Full Report Here
                             </a>
-                            <div className="max-h-[500px] overflow-y-auto prose prose-sm sm:prose-base text-gray-800">
-                                <Markdown>{selectedReport.summary}</Markdown>
-                            </div>
-                            {selectedReport.education && selectedReport.education.length > 0 && <div className="grid gap-2 md:grid-cols-3">{selectedReport.education.map((card) => <div key={card._id} className="border p-3"><p className="font-semibold">{card.title}</p><p className="mt-1 text-xs text-gray-600">{card.summary}</p></div>)}</div>}
+                            <Tabs value={dialogTab} onValueChange={setDialogTab}>
+                                <TabsList className="grid w-full grid-cols-3">
+                                    <TabsTrigger value="summary" className="cursor-pointer">Summary</TabsTrigger>
+                                    <TabsTrigger value="labs" className="cursor-pointer">Labs</TabsTrigger>
+                                    <TabsTrigger value="visual" className="cursor-pointer">3D Explain</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="summary">
+                                    <div className="max-h-[500px] overflow-y-auto prose prose-sm sm:prose-base text-gray-800">
+                                        <Markdown>{selectedReport.summary}</Markdown>
+                                    </div>
+                                    {selectedReport.education && selectedReport.education.length > 0 && <div className="mt-4 grid gap-2 md:grid-cols-3">{selectedReport.education.map((card) => <div key={card._id} className="border p-3"><p className="font-semibold">{card.title}</p><p className="mt-1 text-xs text-gray-600">{card.summary}</p></div>)}</div>}
+                                </TabsContent>
+                                <TabsContent value="labs">
+                                    {!selectedReport.labs || selectedReport.labs.length === 0 ? (
+                                        <p className="border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+                                            No structured lab rows were extracted from this report.
+                                        </p>
+                                    ) : (
+                                        <div className="max-h-[500px] overflow-auto border border-slate-200">
+                                            <table className="w-full text-left text-sm">
+                                                <thead className="bg-slate-100 text-xs uppercase text-slate-600">
+                                                    <tr><th className="px-4 py-2">Test</th><th className="px-4 py-2">Result</th><th className="px-4 py-2">Reference</th><th className="px-4 py-2">Status</th></tr>
+                                                </thead>
+                                                <tbody>
+                                                    {selectedReport.labs.map((lab) => (
+                                                        <tr key={lab._id} className="border-t border-slate-100">
+                                                            <td className="px-4 py-2 font-medium">{lab.canonicalName || lab.test}</td>
+                                                            <td className="px-4 py-2 font-mono">{lab.value} {lab.unit}</td>
+                                                            <td className="px-4 py-2 font-mono text-slate-600">{lab.refMin ?? "—"}–{lab.refMax ?? "—"}</td>
+                                                            <td className={`px-4 py-2 font-semibold ${lab.flag === "normal" ? "text-teal-700" : lab.flag === "unknown" ? "text-slate-500" : "text-rose-700"}`}>{lab.flag}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </TabsContent>
+                                <TabsContent value="visual">
+                                    <div className="max-h-[500px] overflow-y-auto pr-1">
+                                        <ReportVisualize reportId={selectedReport._id} summary={selectedReport.summary} labs={selectedReport.labs ?? []} />
+                                    </div>
+                                </TabsContent>
+                            </Tabs>
                             <div className="grid gap-2 border-t pt-4 md:grid-cols-[1fr_auto_auto_auto]">
                                 <Input aria-label="Doctor or family email for sharing" value={shareEmail} onChange={(event) => setShareEmail(event.target.value)} placeholder="Doctor or family email (optional)" type="email" />
                                 <Button variant="outline" onClick={createShare}><Share2 className="mr-2 h-4 w-4" />Share 7 days</Button>

@@ -5,6 +5,9 @@ import { getEntitlements } from "@/lib/entitlements";
 import { createShareToken, writeAuditLog } from "@/lib/share";
 import Report from "@/models/report";
 import VaultShare from "@/models/vaultShare";
+import LabResult from "@/models/labResult";
+import { suggestOrgans } from "@/lib/anatomy/organ-keywords.ts";
+import { refineOrgansWithLLM, resolveVisualizations } from "@/lib/anatomy/organ-llm.ts";
 
 const createShareSchema = z.object({
   reportId: z.string().min(1),
@@ -45,6 +48,33 @@ export async function POST(request: Request) {
     resourceType: "report",
     metadata: { shareId: String(share._id), expiresAt },
   });
+
+  // Snapshot visualizations so viewers see exactly what the owner approved.
+  // Best-effort: share creation must never fail because of it.
+  try {
+    const full = await Report.findOne({ _id: report._id, userId }).lean();
+    if (full && (!full.visualizations || full.visualizations.length === 0) && entitlements.trends) {
+      const labs = await LabResult.find({ reportId: full._id, userId })
+        .select({ canonicalName: 1, test: 1, flag: 1 })
+        .lean();
+      const text = `${full.summary ?? ""}\n\n${full.ocr ?? ""}`;
+      const { suggestions } = await resolveVisualizations({
+        deterministic: suggestOrgans(
+          labs.map((lab) => ({ canonicalName: lab.canonicalName, test: lab.test, flag: lab.flag })),
+          text,
+        ),
+        refine: () => refineOrgansWithLLM(text),
+      });
+      if (suggestions.length > 0) {
+        await Report.updateOne(
+          { _id: full._id, userId },
+          { $set: { visualizations: suggestions.map((s) => ({ ...s, computedAt: new Date() })) } },
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Share visualization snapshot failed", error instanceof Error ? error.message : error);
+  }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
   return Response.json({ url: `${baseUrl}/share/${token}`, expiresAt });

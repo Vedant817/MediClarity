@@ -4,6 +4,8 @@ import { headers } from "next/headers";
 import { after } from "next/server";
 import Markdown from "react-markdown";
 import { readPublicShare, writeAuditLog } from "@/lib/share";
+import { toPlainExcerpt } from "@/lib/summary-excerpt";
+import ShareVisualize from "@/components/anatomy/ShareVisualize";
 
 export default async function SharedReportPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -54,6 +56,11 @@ export default async function SharedReportPage({ params }: { params: Promise<{ t
             </table>
           </div>
         </section>
+
+        <ShareVisualize
+          visualizations={data.visualizations}
+          caption={toPlainExcerpt(data.report.summary, 320) || "Key findings from this report, explained in simple language."}
+        />
 
         <section className="border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold">Plain-language summary</h2>
