@@ -1,0 +1,107 @@
+{
+  "heart": {
+    "file": "heart.glb",
+    "bytes": 1745560,
+    "url": "https://cdn.humanatlas.io/digital-objects/ref-organ/heart-female/v1.3/assets/3d-vh-f-heart.glb",
+    "license": "CC-BY 4.0",
+    "attribution": "Human Reference Atlas 3D Reference Object Library (CC-BY 4.0)",
+    "status": "local",
+    "verifiedAt": "2026-09-14T14:16:04.240Z"
+  },
+  "lung": {
+    "file": "lung.glb",
+    "bytes": 3678148,
+    "url": "https://cdn.humanatlas.io/digital-objects/ref-organ/lung-female/v1.4/assets/3d-vh-f-lung.glb",
+    "license": "CC-BY 4.0",
+    "attribution": "Human Reference Atlas 3D Reference Object Library (CC-BY 4.0)",
+    "status": "local",
+    "verifiedAt": "2026-09-14T14:16:04.245Z"
+  },
+  "kidney": {
+    "file": "kidney.glb",
+    "bytes": 1356736,
+    "url": "https://cdn.humanatlas.io/digital-objects/ref-organ/kidney-female-left/v1.3/assets/3d-vh-f-kidney-l.glb",
+    "license": "CC-BY 4.0",
+    "attribution": "Human Reference Atlas 3D Reference Object Library (CC-BY 4.0)",
+    "status": "local",
+    "verifiedAt": "2026-09-14T14:16:04.246Z"
+  },
+  "liver": {
+    "file": "liver.glb",
+    "bytes": 1738552,
+    "url": "https://cdn.humanatlas.io/digital-objects/ref-organ/liver-female/v1.2/assets/3d-vh-f-liver.glb",
+    "license": "CC-BY 4.0",
+    "attribution": "Human Reference Atlas 3D Reference Object Library (CC-BY 4.0)",
+    "status": "local",
+    "verifiedAt": "2026-09-14T14:16:04.247Z"
+  },
+  "intestine": {
+    "file": "intestine.glb",
+    "bytes": 387376,
+    "url": "https://cdn.humanatlas.io/digital-objects/ref-organ/large-intestine-female/v1.3/assets/3d-sbu-f-large-intestine.glb",
+    "license": "CC-BY 4.0",
+    "attribution": "Human Reference Atlas 3D Reference Object Library (CC-BY 4.0)",
+    "status": "local",
+    "verifiedAt": "2026-09-14T14:16:04.247Z"
+  },
+  "pancreas": {
+    "file": "pancreas.glb",
+    "bytes": 714832,
+    "url": "https://cdn.humanatlas.io/digital-objects/ref-organ/pancreas-female/v1.3/assets/3d-vh-f-pancreas.glb",
+    "license": "CC-BY 4.0",
+    "attribution": "Human Reference Atlas 3D Reference Object Library (CC-BY 4.0)",
+    "status": "local",
+    "verifiedAt": "2026-09-14T14:16:04.248Z"
+  },
+  "brain": {
+    "file": "brain.glb",
+    "bytes": 2831112,
+    "url": "https://cdn.humanatlas.io/digital-objects/ref-organ/brain-female/v1.4/assets/3d-allen-f-brain.glb",
+    "license": "CC-BY 4.0",
+    "attribution": "Human Reference Atlas 3D Reference Object Library (CC-BY 4.0)",
+    "status": "local",
+    "verifiedAt": "2026-09-14T14:16:04.249Z"
+  },
+  "bladder": {
+    "file": "bladder.glb",
+    "bytes": 765224,
+    "url": "https://cdn.humanatlas.io/digital-objects/ref-organ/urinary-bladder-female/v1.2/assets/3d-vh-f-urinary-bladder.glb",
+    "license": "CC-BY 4.0",
+    "attribution": "Human Reference Atlas 3D Reference Object Library (CC-BY 4.0)",
+    "status": "local",
+    "verifiedAt": "2026-09-14T14:16:04.249Z"
+  },
+  "spleen": {
+    "file": "spleen.glb",
+    "bytes": 276824,
+    "url": "https://cdn.humanatlas.io/digital-objects/ref-organ/spleen-female/v1.3/assets/3d-vh-f-spleen.glb",
+    "license": "CC-BY 4.0",
+    "attribution": "Human Reference Atlas 3D Reference Object Library (CC-BY 4.0)",
+    "status": "local",
+    "verifiedAt": "2026-09-14T14:16:04.250Z"
+  },
+  "stomach": {
+    "file": "stomach.glb",
+    "url": "https://persist-3d-media.s3.amazonaws.com/660113/realistic_stomach.glb",
+    "license": "CC-BY 4.0",
+    "attribution": "NIH 3D entry 3DPX-021124, Stomach (ventriculus) by Johnson J (CC-BY 4.0)",
+    "status": "gap",
+    "error": "HTTP 403"
+  },
+  "nose-sinus": {
+    "file": null,
+    "url": null,
+    "license": "pending",
+    "attribution": "pending",
+    "status": "placeholder",
+    "note": "No verified free mesh yet; viewer shows an educational placeholder card."
+  },
+  "thyroid": {
+    "file": null,
+    "url": null,
+    "license": "pending",
+    "status": "placeholder",
+    "attribution": "pending",
+    "note": "No verified free mesh yet; viewer shows an educational placeholder card."
+  }
+}
