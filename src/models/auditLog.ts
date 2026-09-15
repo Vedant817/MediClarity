@@ -1,6 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 
-export type AuditAction = "view" | "share" | "download" | "revoke";
+export type AuditAction = "view" | "share" | "download" | "revoke" | "visualize";
 
 export interface IAuditLog {
   actorId?: string;
@@ -16,7 +16,7 @@ export interface IAuditLog {
 const AuditLogSchema = new Schema<IAuditLog>(
   {
     actorId: { type: String, index: true },
-    action: { type: String, enum: ["view", "share", "download", "revoke"], required: true, index: true },
+    action: { type: String, enum: ["view", "share", "download", "revoke", "visualize"], required: true, index: true },
     resourceId: { type: String, required: true, index: true },
     resourceType: { type: String, enum: ["report", "lab", "share"], required: true },
     ipHash: String,

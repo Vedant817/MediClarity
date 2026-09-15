@@ -1,5 +1,15 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+export interface IReportVisualization {
+  organId: string;
+  subRegion?: string | null;
+  relatedTo?: string | null;
+  confidence: number;
+  evidence: string[];
+  laterality: string;
+  computedAt: Date;
+}
+
 export interface IReport extends Document {
   _id: mongoose.Types.ObjectId;
   userId: string;
@@ -10,6 +20,7 @@ export interface IReport extends Document {
   sourceLab?: string;
   sourceCountry?: string;
   reportDate?: Date;
+  visualizations: IReportVisualization[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +35,20 @@ const ReportSchema = new Schema<IReport>(
     sourceLab: { type: String, trim: true, maxlength: 160 },
     sourceCountry: { type: String, trim: true, maxlength: 80 },
     reportDate: { type: Date, index: true },
+    visualizations: {
+      type: [
+        {
+          organId: { type: String, required: true },
+          subRegion: { type: String, default: null },
+          relatedTo: { type: String, default: null },
+          confidence: { type: Number, required: true, min: 0, max: 1 },
+          evidence: { type: [String], default: [] },
+          laterality: { type: String, default: "unknown" },
+          computedAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   },

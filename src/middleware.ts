@@ -33,6 +33,7 @@ const routeAuthenticatedApi = createRouteMatcher([
     '/api/appointment/scheduler(.*)',
     '/api/labs',
     '/api/triage',
+    '/api/visualize',
     '/api/meds(.*)',
     '/api/education',
     '/api/settings',

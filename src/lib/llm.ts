@@ -5,6 +5,7 @@ export type LLMTask =
   | "extract"
   | "enrich"
   | "summary"
+  | "visualize"
   | "chat"
   | "triage"
   | "translate"
@@ -15,6 +16,7 @@ const taskOptions: Record<LLMTask, { temperature: number; maxTokens: number }> =
   extract: { temperature: 0, maxTokens: 6000 },
   enrich: { temperature: 0, maxTokens: 3000 },
   summary: { temperature: 0.25, maxTokens: 1500 },
+  visualize: { temperature: 0.1, maxTokens: 800 },
   chat: { temperature: 0.25, maxTokens: 1500 },
   triage: { temperature: 0.1, maxTokens: 1200 },
   translate: { temperature: 0.1, maxTokens: 2000 },
@@ -37,8 +39,11 @@ function runtimeSetting(name: string, value: string | undefined, developmentDefa
 export function groqModelForTask(task: LLMTask): string {
   const base = runtimeSetting("GROQ_MODEL", process.env.GROQ_MODEL, "openai/gpt-oss-20b");
   if (task === "extract") return process.env.GROQ_EXTRACT_MODEL?.trim() || base;
-  if (task === "enrich" || task === "summary") {
-    const override = task === "enrich" ? process.env.GROQ_ENRICH_MODEL : process.env.GROQ_SUMMARY_MODEL;
+  if (task === "enrich" || task === "summary" || task === "visualize") {
+    const override =
+      task === "enrich" || task === "visualize"
+        ? process.env.GROQ_ENRICH_MODEL
+        : process.env.GROQ_SUMMARY_MODEL;
     return override?.trim() || base;
   }
   return process.env.GROQ_CHAT_MODEL?.trim() || base;
