@@ -161,13 +161,12 @@ export default function ReportsPage() {
                 </div>
             </ScrollArea>
             <Dialog open={!!selectedReport} onOpenChange={(open) => { if (!open) { setSelectedReport(null); setDialogTab("summary") } }}>
-                <DialogContent className="w-[calc(100vw-2rem)] max-w-6xl sm:max-w-6xl">
+                <DialogContent className="flex max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-6xl flex-col overflow-hidden sm:max-w-6xl">
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-bold mb-2">📝 Report Details</DialogTitle>
                     </DialogHeader>
                     {selectedReport && (
-                        <div className="flex flex-col space-y-4 text-sm">
-
+                        <div key={selectedReport._id} className="flex min-h-0 flex-1 flex-col space-y-4 text-sm">
                             <a
                                 href={selectedReport.fileUrl}
                                 target="_blank"
@@ -176,25 +175,25 @@ export default function ReportsPage() {
                             >
                                 View Full Report Here
                             </a>
-                            <Tabs value={dialogTab} onValueChange={setDialogTab}>
-                                <TabsList className="grid w-full grid-cols-3">
+                            <Tabs value={dialogTab} onValueChange={setDialogTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                                <TabsList className="grid w-full shrink-0 grid-cols-3">
                                     <TabsTrigger value="summary" className="cursor-pointer">Summary</TabsTrigger>
                                     <TabsTrigger value="labs" className="cursor-pointer">Labs</TabsTrigger>
                                     <TabsTrigger value="visual" className="cursor-pointer">3D Explain</TabsTrigger>
                                 </TabsList>
-                                <TabsContent value="summary">
-                                    <div className="max-h-[500px] overflow-y-auto text-sm leading-7 text-gray-800">
+                                <TabsContent value="summary" className="min-h-0 flex-1 overflow-y-auto pr-1">
+                                    <div className="text-sm leading-7 text-gray-800">
                                         <Markdown>{selectedReport.summary}</Markdown>
                                     </div>
                                     {selectedReport.education && selectedReport.education.length > 0 && <div className="mt-4 grid gap-2 md:grid-cols-3">{selectedReport.education.map((card) => <div key={card._id} className="border p-3"><p className="font-semibold">{card.title}</p><p className="mt-1 text-xs text-gray-600">{card.summary}</p></div>)}</div>}
                                 </TabsContent>
-                                <TabsContent value="labs">
+                                <TabsContent value="labs" className="min-h-0 flex-1 overflow-y-auto pr-1">
                                     {!selectedReport.labs || selectedReport.labs.length === 0 ? (
                                         <p className="border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
                                             No structured lab rows were extracted from this report.
                                         </p>
                                     ) : (
-                                        <div className="max-h-[500px] overflow-auto border border-slate-200">
+                                        <div className="overflow-auto border border-slate-200">
                                             <table className="w-full text-left text-sm">
                                                 <thead className="bg-slate-100 text-xs uppercase text-slate-600">
                                                     <tr><th className="px-4 py-2">Test</th><th className="px-4 py-2">Result</th><th className="px-4 py-2">Reference</th><th className="px-4 py-2">Status</th></tr>
@@ -213,14 +212,12 @@ export default function ReportsPage() {
                                         </div>
                                     )}
                                 </TabsContent>
-                                <TabsContent value="visual">
-                                    <div className="max-h-[500px] overflow-y-auto pr-1">
-                                        <ReportVisualize reportId={selectedReport._id} summary={selectedReport.summary} labs={selectedReport.labs ?? []} />
-                                    </div>
+                                <TabsContent value="visual" className="min-h-0 flex-1 overflow-y-auto pr-1">
+                                    <ReportVisualize reportId={selectedReport._id} summary={selectedReport.summary} labs={selectedReport.labs ?? []} />
                                 </TabsContent>
                             </Tabs>
                             <div className="text-red-600 font-semibold">For information only, not medical advice or diagnosis. Verify structured rows against the original report and consult a qualified clinician.</div>
-                            <div className="sticky bottom-0 -mx-6 -mb-6 space-y-2 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur">
+                            <div className="-mx-6 -mb-6 space-y-2 border-t border-slate-200 bg-white px-6 py-3 shadow-[0_-6px_16px_rgba(16,44,42,0.10)]">
                                 <div className="grid gap-2 md:grid-cols-[1fr_auto_auto_auto]">
                                     <Input aria-label="Doctor or family email for sharing" value={shareEmail} onChange={(event) => setShareEmail(event.target.value)} placeholder="Doctor or family email (optional)" type="email" />
                                     <Button variant="outline" onClick={createShare}><Share2 className="mr-2 h-4 w-4" />Share 7 days</Button>
