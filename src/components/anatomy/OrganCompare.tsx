@@ -126,8 +126,8 @@ function LesionMarker({
           depthWrite={false}
         />
       </mesh>
-      <Html center distanceFactor={7} zIndexRange={[20, 0]}>
-        <span className="whitespace-nowrap rounded-full border border-rose-200 bg-white/95 px-2 py-0.5 font-mono text-[10px] font-semibold text-rose-700 shadow-sm">
+      <Html center position={[0, radius * 1.8, 0]} distanceFactor={8} zIndexRange={[20, 0]}>
+        <span className="pointer-events-none whitespace-nowrap rounded-full border border-rose-200 bg-white/95 px-1.5 py-0.5 font-mono text-[8px] font-semibold leading-none text-rose-700 shadow-sm">
           {label}
         </span>
       </Html>
