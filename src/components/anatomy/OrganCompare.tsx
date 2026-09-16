@@ -2,7 +2,7 @@
 
 import { Component, Suspense, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
-import { Canvas, useFrame, useLoader } from "@react-three/fiber";
+import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { Html, OrbitControls } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
@@ -16,7 +16,7 @@ import {
   type VisualizationSuggestion,
 } from "@/lib/anatomy/types";
 import { getHighlightMeaning, matchDrivingLabs, type DrivingLab } from "@/lib/anatomy/highlight-info";
-import { resolveHotspot, shouldRenderMesh } from "@/lib/anatomy/viewer";
+import { fitModelScale, resolveHotspot, shouldRenderMesh } from "@/lib/anatomy/viewer";
 
 export type OrganCompareProps = {
   entry: OrganModelEntry;
@@ -69,6 +69,11 @@ function NormalizedModel({
   // canvas steal the mesh from the first and render an empty panel.
   // clone(true) shares geometry/material (cheap) with a distinct hierarchy.
   const scene = useMemo(() => gltf.scene.clone(true), [gltf]);
+  // Fit the organ to the visible viewport (tighter axis, 85% fill) instead
+  // of a fixed world size: flat organs fill the width, tall ones the
+  // height, and nobody has to hunt for the model. Recomputes on resize
+  // via the viewport subscription.
+  const viewport = useThree((s) => s.viewport);
   const transform = useMemo(() => {
     const box = new THREE.Box3().setFromObject(scene);
     const size = new THREE.Vector3();
@@ -76,13 +81,15 @@ function NormalizedModel({
     const center = new THREE.Vector3();
     box.getCenter(center);
     const maxDim = Math.max(size.x, size.y, size.z, 0.001);
-    return { offset: center.multiplyScalar(-1), scale: 2.2 / maxDim, maxDim };
-  }, [scene]);
+    const fit = fitModelScale(size, viewport, 0.85);
+    const scale = Number.isFinite(fit) && fit > 0 ? fit : 2.2 / maxDim;
+    return { offset: center.multiplyScalar(-1), scale };
+  }, [scene, viewport]);
   // Marker lives INSIDE the normalized group so it tracks the mesh at any
   // scale/center. Registry positions are mesh-local units; the radius is
-  // derived from the organ size so the pin renders at a constant 0.24
-  // normalized units on every organ.
-  const markerRadius = (transform.maxDim * 0.24) / 2.2;
+  // derived from the fitted scale so the pin renders at a constant 0.24
+  // world units on every organ.
+  const markerRadius = 0.24 / transform.scale;
   return (
     <group position={transform.offset} scale={transform.scale}>
       <primitive object={scene} />
@@ -317,11 +324,10 @@ function LoadErrorCard({ entry, suggestion, caption, allowTranslate = false, onR
 
 export default function OrganCompare(props: OrganCompareProps) {
   const { entry, suggestion, caption, manual = false, allowTranslate = false, labs = [] } = props;
-  const [autoRotate, setAutoRotate] = useState(
-    () =>
-      typeof window === "undefined" ||
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
+  // Motion is mouse-only by default: the model sits still until the user
+  // drags (rotate) or scrolls (zoom). Ticking auto-rotate also re-enables
+  // the marker pulse; both stop the moment the box is unchecked.
+  const [autoRotate, setAutoRotate] = useState(false);
   const [lesionOpacity, setLesionOpacity] = useState(0.85);
   const [sourceIndex, setSourceIndex] = useState(0);
   const [failed, setFailed] = useState(false);

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { MODEL_REGISTRY } from "../src/lib/anatomy/registry.ts";
 import { ORGAN_IDS } from "../src/lib/anatomy/types.ts";
+import { fitModelScale } from "../src/lib/anatomy/viewer.ts";
 import {
   ORGAN_HIGHLIGHT_INFO,
   getHighlightMeaning,
@@ -59,4 +60,19 @@ test("matchDrivingLabs handles short spans and avoids false positives", () => {
   ];
   assert.deepEqual(matchDrivingLabs(labs, ["TSH 9.4"]).map((lab) => lab.test), ["TSH"]);
   assert.deepEqual(matchDrivingLabs(labs, ["patient feels tired"]), []);
+});
+
+test("fitModelScale fills the tighter axis (flat organs use width, tall use height)", () => {
+  // Flat pancreas-like box in a wide panel: width binds.
+  assert.ok(Math.abs(fitModelScale({ x: 0.17, y: 0.057 }, { width: 4.7, height: 2.47 }) - (4.7 * 0.85) / 0.17) < 1e-9);
+  // Tall kidney-like box: height binds.
+  assert.ok(Math.abs(fitModelScale({ x: 0.073, y: 0.125 }, { width: 4.7, height: 2.47 }) - (2.47 * 0.85) / 0.125) < 1e-9);
+  // Square box in a square viewport fills 85% both ways.
+  assert.equal(fitModelScale({ x: 2, y: 2 }, { width: 4, height: 4 }), 1.7);
+});
+
+test("fitModelScale never vanishes on bad input", () => {
+  assert.equal(fitModelScale({ x: 0, y: 0 }, { width: 4, height: 4 }), 1);
+  assert.equal(fitModelScale({ x: 1, y: 1 }, { width: 0, height: 0 }), 1);
+  assert.equal(fitModelScale({ x: NaN, y: 1 }, { width: 4, height: 4 }), 1);
 });
