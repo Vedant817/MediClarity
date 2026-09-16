@@ -66,10 +66,29 @@ export function rateLimitDelayMs(error: unknown, attempt: number): number {
   return Math.min(60_000, 4_000 * 2 ** attempt);
 }
 
+const TRANSIENT_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const TRANSIENT_MESSAGE = /overload|timeout|temporar|try again|fetch failed|socket hang up|ECONNRESET|ETIMEDOUT|EAI_AGAIN|service unavailable|bad gateway|gateway timeout|internal error/i;
+
 /**
- * Invoke an LLM call, transparently retrying rate-limit (429) failures.
- * Quality-neutral: same model, same prompt, just waits for the free-tier
- * window instead of surfacing the error.
+ * Retryable provider failures: rate limits plus overloaded/unreachable
+ * servers and dropped connections. Groq free tier returns 503/500/overload
+ * under load as often as 429 — retrying only 429 leaves booking turns
+ * failing with a generic error. Only used pre-first-chunk, where repeating
+ * the same prompt is side-effect free.
+ */
+export function isTransientLLMError(error: unknown): boolean {
+  if (isRateLimitError(error)) return true;
+  if (typeof error === "string") return TRANSIENT_MESSAGE.test(error);
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { status?: unknown; code?: unknown; message?: unknown };
+  if (typeof candidate.status === "number" && TRANSIENT_STATUS.has(candidate.status)) return true;
+  if (typeof candidate.code === "number" && TRANSIENT_STATUS.has(candidate.code)) return true;
+  return TRANSIENT_MESSAGE.test(String(candidate.message ?? ""));
+}
+
+/**
+ * Invoke an LLM call, transparently retrying transient provider failures.
+ * Quality-neutral: same model and prompt, with provider-directed backoff.
  */
 export async function invokeWithRetry<T>(
   invoke: () => Promise<T>,
@@ -83,7 +102,7 @@ export async function invokeWithRetry<T>(
       return await invoke();
     } catch (error) {
       lastError = error;
-      if (!isRateLimitError(error) || attempt === retries) throw error;
+      if (!isTransientLLMError(error) || attempt === retries) throw error;
       await sleep(rateLimitDelayMs(error, attempt));
     }
   }

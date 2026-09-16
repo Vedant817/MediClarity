@@ -6,9 +6,10 @@ import Provider from "@/models/provider";
 import Conversation, { IMessage } from "@/models/conversation";
 import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { auth } from "@clerk/nextjs/server";
-import { getLLM, llmContentToText, isRateLimitError, rateLimitDelayMs } from "@/lib/llm";
+import { getLLM, invokeWithRetry, isTransientLLMError, llmContentToText } from "@/lib/llm";
 import { getAvailabilityWindow } from "@/lib/availability";
 import { appointmentTypeIds } from "@/lib/data";
+import { boundedSchedulerMessages, compactSchedulerReports } from "@/lib/scheduler-context";
 
 export const runtime = "nodejs";
 const disclaimer = "For information only, not medical advice.";
@@ -49,9 +50,10 @@ export async function POST(req: NextRequest) {
 
     conversation.messages.push(...newUserMessages);
 
-    const recentReports = await Report.find({ userId })
+    const recentReportDocuments = await Report.find({ userId })
         .select({ summary: 1, reportDate: 1, sourceLab: 1, createdAt: 1 })
-        .sort({ createdAt: -1 }).limit(5).lean();
+        .sort({ createdAt: -1 }).limit(3).lean();
+    const recentReports = compactSchedulerReports(recentReportDocuments);
     const pastAppointments = await Appointment.find({ patientId: userId })
         .select({ providerId: 1, date: 1, time: 1, reason: 1, status: 1 })
         .sort({ date: -1 }).limit(20).lean();
@@ -114,68 +116,32 @@ export async function POST(req: NextRequest) {
     try {
         const model = getLLM("scheduler");
 
-        const recentConversationMessages = conversation.messages.slice(-10);
+        const recentConversationMessages = boundedSchedulerMessages(conversation.messages);
         const langchainMessages = [
             new SystemMessage(systemInstruction),
-            ...recentConversationMessages.map((msg: IMessage) => {
+            ...recentConversationMessages.map((msg) => {
                 if (msg.role === "assistant") return new AIMessage(msg.content);
                 if (msg.role === "system") return new SystemMessage(msg.content);
                 return new HumanMessage(msg.content);
             })
         ];
 
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-            async start(controller) {
-                try {
-                    // Transient Groq free-tier failures (429/overload) must not
-                    // kill a booking turn: retry while nothing has streamed yet.
-                    // Once the first chunk is out, the response is committed.
-                    let fullResponse = '';
-                    let started = false;
-                    for (let attempt = 0; attempt <= 2; attempt += 1) {
-                        try {
-                            fullResponse = '';
-                            for await (const chunk of await model.stream(langchainMessages)) {
-                                const content = llmContentToText(chunk.content);
-                                if (!content) continue;
-                                started = true;
-                                controller.enqueue(encoder.encode(content));
-                                fullResponse += content;
-                            }
-                            break;
-                        } catch (error) {
-                            if (started || !isRateLimitError(error) || attempt === 2) throw error;
-                            await new Promise((resolve) => setTimeout(resolve, rateLimitDelayMs(error, attempt)));
-                        }
-                    }
+        // Resolve the model response before committing HTTP headers. This lets
+        // transient 429/5xx/network failures retry safely instead of breaking
+        // the browser's response stream halfway through a booking turn.
+        const response = await invokeWithRetry(() => model.invoke(langchainMessages));
+        let fullResponse = llmContentToText(response.content).trim();
+        if (!fullResponse) throw new Error("AI provider returned an empty scheduler response");
+        if (!fullResponse.includes(disclaimer)) fullResponse += `\n\n${disclaimer}`;
 
-                    if (!fullResponse.trim()) {
-                        throw new Error("AI provider returned an empty scheduler response");
-                    }
-                    if (!fullResponse.includes(disclaimer)) {
-                        const suffix = `\n\n${disclaimer}`;
-                        controller.enqueue(encoder.encode(suffix));
-                        fullResponse += suffix;
-                    }
-
-                    conversation.messages.push({
-                        role: 'assistant',
-                        content: fullResponse,
-                        timestamp: new Date()
-                    });
-
-                    await conversation.save();
-
-                    controller.close();
-                } catch (error) {
-                    console.error("AI scheduler stream failed:", error);
-                    controller.error(error);
-                }
-            },
+        conversation.messages.push({
+            role: 'assistant',
+            content: fullResponse,
+            timestamp: new Date()
         });
+        await conversation.save();
 
-        return new Response(stream, {
+        return new Response(fullResponse, {
             headers: {
                 'Content-Type': 'text/plain',
                 'X-Conversation-ID': conversation._id.toString()
@@ -183,6 +149,10 @@ export async function POST(req: NextRequest) {
         });
     } catch (error) {
         console.error("Error in AI scheduler:", error);
-        return NextResponse.json({ error: "Failed to generate response" }, { status: 500 });
+        const transient = isTransientLLMError(error);
+        return NextResponse.json(
+            { error: transient ? "The scheduling assistant is temporarily busy. Please retry in a moment." : "Failed to generate response" },
+            { status: transient ? 503 : 500 },
+        );
     }
 }

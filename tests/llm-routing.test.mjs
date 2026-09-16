@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   groqModelForTask,
   invokeWithRetry,
+  isTransientLLMError,
   isRateLimitError,
   rateLimitDelayMs,
 } from "../src/lib/llm.ts";
@@ -84,7 +85,7 @@ test("invokeWithRetry waits out rate limits then succeeds", async () => {
   assert.equal(sleeps.length, 2);
 });
 
-test("invokeWithRetry rethrows non-rate-limit errors immediately", async () => {
+test("invokeWithRetry rethrows non-transient errors immediately", async () => {
   let calls = 0;
   await assert.rejects(
     invokeWithRetry(() => {
@@ -94,4 +95,24 @@ test("invokeWithRetry rethrows non-rate-limit errors immediately", async () => {
     /did not return JSON/,
   );
   assert.equal(calls, 1);
+});
+
+test("detects retryable provider and network failures", () => {
+  assert.equal(isTransientLLMError({ status: 503, message: "Service unavailable" }), true);
+  assert.equal(isTransientLLMError(new Error("fetch failed: ECONNRESET")), true);
+  assert.equal(isTransientLLMError({ status: 400, message: "Bad request" }), false);
+});
+
+test("invokeWithRetry retries transient 5xx failures", async () => {
+  let attempts = 0;
+  const result = await invokeWithRetry(
+    async () => {
+      attempts += 1;
+      if (attempts < 2) throw Object.assign(new Error("provider overloaded"), { status: 503 });
+      return "ok";
+    },
+    { retries: 2, sleep: async () => {} },
+  );
+  assert.equal(result, "ok");
+  assert.equal(attempts, 2);
 });

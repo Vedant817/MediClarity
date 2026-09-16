@@ -224,7 +224,11 @@ export default function ConversationalScheduler() {
                 return;
             }
             console.error('Error:', error);
-            toast.error('Failed to get response from AI assistant');
+            const isTemporaryProviderFailure = error instanceof Error && error.message.includes('temporarily busy');
+            const failureMessage = isTemporaryProviderFailure
+                ? 'The scheduling assistant is temporarily busy. Please wait a moment and try again. Your appointment has not been booked.'
+                : 'I could not complete that scheduling request. Please try again. Your appointment has not been booked.';
+            toast.error(isTemporaryProviderFailure ? 'Scheduler temporarily busy' : 'Scheduling request failed');
             setMessages(prev => {
                 // Drop the empty assistant placeholder so a retry starts clean
                 // and stale blanks are never saved to history.
@@ -234,7 +238,7 @@ export default function ConversationalScheduler() {
                 return [...trimmed, {
                     id: Date.now().toString(),
                     role: 'assistant' as const,
-                    content: 'Sorry, I encountered an error processing your request. Please try again.',
+                    content: failureMessage,
                 }];
             });
         } finally {
