@@ -1,8 +1,8 @@
 "use client";
 
-import { Component, Suspense, useMemo, useRef, useState, type ReactNode } from "react";
+import { Component, Suspense, useMemo, useState, type ReactNode } from "react";
 import * as THREE from "three";
-import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
+import { Canvas, useLoader, useThree } from "@react-three/fiber";
 import { Html, OrbitControls } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
@@ -53,13 +53,11 @@ function NormalizedModel({
   hotspot,
   showMarker,
   markerOpacity,
-  pulse,
 }: {
   url: string;
   hotspot: { label: string; position: [number, number, number] } | null;
   showMarker: boolean;
   markerOpacity: number;
-  pulse: boolean;
 }) {
   const gltf = useLoader(GLTFLoader, url, (loader) => {
     loader.setMeshoptDecoder(MeshoptDecoder);
@@ -91,17 +89,20 @@ function NormalizedModel({
   // world units on every organ.
   const markerRadius = 0.24 / transform.scale;
   return (
-    <group position={transform.offset} scale={transform.scale}>
-      <primitive object={scene} />
-      {showMarker && hotspot ? (
-        <LesionMarker
-          position={hotspot.position}
-          label={hotspot.label}
-          opacity={markerOpacity}
-          pulse={pulse}
-          radius={markerRadius}
-        />
-      ) : null}
+    <group scale={transform.scale}>
+      {/* Translation must be inside the scaled group so the model center is
+          exactly at the OrbitControls target: scale * (point - center). */}
+      <group position={transform.offset}>
+        <primitive object={scene} />
+        {showMarker && hotspot ? (
+          <LesionMarker
+            position={hotspot.position}
+            label={hotspot.label}
+            opacity={markerOpacity}
+            radius={markerRadius}
+          />
+        ) : null}
+      </group>
     </group>
   );
 }
@@ -110,31 +111,19 @@ function LesionMarker({
   position,
   label,
   opacity,
-  pulse,
   radius,
 }: {
   position: [number, number, number];
   label: string;
   opacity: number;
-  /** Gentle glow pulse (organ "activity" cue, cf. Human-Organ3D). Off when the user disables motion. */
-  pulse: boolean;
   /** Mesh-local radius; caller derives it from organ size for uniform pins. */
   radius: number;
 }) {
-  const material = useRef<THREE.MeshStandardMaterial>(null);
-  useFrame(({ clock }) => {
-    if (material.current) {
-      material.current.emissiveIntensity = pulse
-        ? 0.65 + 0.3 * Math.sin(clock.elapsedTime * 2.4)
-        : 0.85;
-    }
-  });
   return (
     <group position={position}>
       <mesh>
         <sphereGeometry args={[radius, 24, 24]} />
         <meshStandardMaterial
-          ref={material}
           color="#e11d48"
           emissive="#e11d48"
           emissiveIntensity={0.85}
@@ -165,14 +154,12 @@ function CanvasLoader() {
 function OrganCanvas({
   url,
   camera,
-  autoRotate,
   affected,
   hotspot,
   lesionOpacity,
 }: {
   url: string;
   camera: OrganModelEntry["camera"];
-  autoRotate: boolean;
   affected: boolean;
   hotspot: { label: string; position: [number, number, number] };
   lesionOpacity: number;
@@ -184,6 +171,7 @@ function OrganCanvas({
   return (
     <Canvas
       dpr={[1, 2]}
+      frameloop="demand"
       camera={{ position: camera.position, fov: camera.fov }}
       gl={{ antialias: true, alpha: true }}
       style={{ background: "transparent" }}
@@ -198,15 +186,18 @@ function OrganCanvas({
           hotspot={affected ? hotspot : null}
           showMarker={affected}
           markerOpacity={lesionOpacity}
-          pulse={autoRotate}
         />
       </Suspense>
       <OrbitControls
-        autoRotate={autoRotate}
-        autoRotateSpeed={1.1}
+        target={[0, 0, 0]}
         enablePan={false}
-        minDistance={1.6}
-        maxDistance={9}
+        enableDamping={false}
+        minPolarAngle={Math.PI / 2}
+        maxPolarAngle={Math.PI / 2}
+        rotateSpeed={0.65}
+        zoomSpeed={0.7}
+        minDistance={2.75}
+        maxDistance={4.5}
       />
       {!booted ? (
         <Html center zIndexRange={[50, 0]}>
@@ -324,10 +315,6 @@ function LoadErrorCard({ entry, suggestion, caption, allowTranslate = false, onR
 
 export default function OrganCompare(props: OrganCompareProps) {
   const { entry, suggestion, caption, manual = false, allowTranslate = false, labs = [] } = props;
-  // Motion is mouse-only by default: the model sits still until the user
-  // drags (rotate) or scrolls (zoom). Ticking auto-rotate also re-enables
-  // the marker pulse; both stop the moment the box is unchecked.
-  const [autoRotate, setAutoRotate] = useState(false);
   const [lesionOpacity, setLesionOpacity] = useState(0.85);
   const [sourceIndex, setSourceIndex] = useState(0);
   const [failed, setFailed] = useState(false);
@@ -386,7 +373,6 @@ export default function OrganCompare(props: OrganCompareProps) {
           <OrganCanvas
             url={url}
             camera={entry.camera}
-            autoRotate={autoRotate}
             affected={affectedPanel}
             hotspot={hotspot}
             lesionOpacity={lesionOpacity}
@@ -458,7 +444,7 @@ export default function OrganCompare(props: OrganCompareProps) {
           <span className="size-2.5 rounded-full bg-rose-600" aria-hidden="true" />
           Rose pin = illustration only, floats above the surface
         </span>
-        <span className="text-slate-500">Drag to rotate · scroll to zoom</span>
+        <span className="text-slate-500">Drag left or right to rotate · scroll to zoom</span>
       </p>
       <div className="grid gap-4 md:grid-cols-2">
         {canvasFigure(false, "Healthy reference", "text-slate-500 border-slate-200", "border-slate-200")}
@@ -466,15 +452,7 @@ export default function OrganCompare(props: OrganCompareProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-        <label className="flex items-center gap-2 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            checked={autoRotate}
-            onChange={(event) => setAutoRotate(event.target.checked)}
-            className="size-4 accent-teal-700"
-          />
-          Auto-rotate
-        </label>
+        <span className="text-sm font-medium text-teal-800">Mouse controlled only · no automatic rotation</span>
         <label className="flex items-center gap-2 text-sm text-slate-600">
           Highlight
           <input
