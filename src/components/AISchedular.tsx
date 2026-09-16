@@ -25,6 +25,24 @@ function extractTaggedJson<T>(message: string, tag: 'SUGGESTED_DOCTORS' | 'BOOKI
     return null;
 }
 
+/**
+ * Strip streaming artifacts from assistant text before rendering/saving:
+ * leftover SUGGESTED_DOCTORS/BOOKING_READY tags, stray lines that contain
+ * only markdown emphasis markers (rendered literally as "**"), and excess
+ * blank lines. Lines with real content (including list items) are kept.
+ */
+function cleanAssistantText(content: string): string {
+    return content
+        .replace(/SUGGESTED_DOCTORS[\s\S]*?\]/, '')
+        .replace(/BOOKING_READY[\s\S]*?\}/, '')
+        .replace(/BOOKING_READY|SUGGESTED_DOCTORS/g, '')
+        .split('\n')
+        .filter((line) => !/^\s*\*{1,3}\s*$/.test(line))
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 export default function ConversationalScheduler() {
     const router = useRouter();
     const { user } = useUser();
@@ -189,10 +207,7 @@ export default function ConversationalScheduler() {
                 }
             }
 
-            const conversationalText = finalContent
-                .replace(/SUGGESTED_DOCTORS[\s\S]*?]/, '')
-                .replace(/BOOKING_READY[\s\S]*?}/, '')
-                .trim();
+            const conversationalText = cleanAssistantText(finalContent);
 
             setMessages(prev => {
                 const newMessages = [...prev];
@@ -273,8 +288,11 @@ export default function ConversationalScheduler() {
                 {messages.filter(m => m.role !== 'system').map((m, i) => (
                     <div
                         key={i}
-                        className={`flex-grow-0 p-3 rounded-lg max-w-[80%] ${m.role === 'user' ? 'bg-blue-500 text-white rounded-br-none ml-auto' : 'bg-gray-200 text-gray-800 rounded-bl-none mr-auto'}`}>
-                        <Markdown>{m.content.replace(/BOOKING_READY|SUGGESTED_DOCTORS/g, '')}</Markdown>
+                        className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div
+                            className={`w-fit min-w-0 max-w-[80%] break-words p-3 rounded-lg ${m.role === 'user' ? 'bg-blue-500 text-white rounded-br-none' : 'bg-gray-200 text-gray-800 rounded-bl-none overflow-hidden'}`}>
+                            <Markdown>{m.role === 'assistant' ? cleanAssistantText(m.content) : m.content}</Markdown>
+                        </div>
                     </div>
                 ))}
                 {isLoading && (
