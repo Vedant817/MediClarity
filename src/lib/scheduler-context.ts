@@ -10,6 +10,8 @@ export type SchedulerMessage = {
   content: string;
 };
 
+const UNVERIFIED_BOOKING_CLAIM = /\b(?:your\s+appointment\s+(?:is|has been)\s+(?:confirmed|booked|scheduled)|(?:i(?:'ve| have)|we(?:'ve| have))\s+(?:booked|scheduled|confirmed)\s+(?:your|the)\s+appointment)\b/i;
+
 function compactText(value: string, limit: number): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= limit) return normalized;
@@ -54,4 +56,23 @@ export function boundedSchedulerMessages(
   }
 
   return selected.reverse();
+}
+
+/**
+ * Model text is never proof of a database write. A valid BOOKING_READY payload
+ * is only a proposal; the authenticated server action performs the booking.
+ */
+export function guardUnverifiedBookingClaim(response: string): string {
+  if (!UNVERIFIED_BOOKING_CLAIM.test(response)) return response;
+
+  const marker = "BOOKING_READY";
+  const markerIndex = response.indexOf(marker);
+  if (markerIndex >= 0) {
+    return [
+      "Your appointment details are ready. Select Schedule Appointment below to complete the booking.",
+      response.slice(markerIndex).trim(),
+    ].join("\n\n");
+  }
+
+  return "Your appointment has not been booked yet. I still need to prepare a validated booking confirmation before you can schedule it.";
 }

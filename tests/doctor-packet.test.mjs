@@ -12,6 +12,7 @@ test("cleanPacketText maps unicode to WinAnsi-safe ASCII and drops control chars
   assert.equal(cleanPacketText("a\x11b\x00c"), "abc");
   assert.equal(cleanPacketText("a\u00A0b\tc"), "a b c");
   assert.equal(cleanPacketText("**bold** and `code` and # hash"), "bold and code and # hash");
+  assert.equal(cleanPacketText("Line 1<br>Line 2<br/>Line 3"), "Line 1\nLine 2\nLine 3");
   assert.equal(cleanPacketText(null), "");
   assert.equal(cleanPacketText(42), "");
 });

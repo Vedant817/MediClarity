@@ -297,7 +297,9 @@ export default function ConversationalScheduler() {
         <div className="w-full max-w-7xl mx-auto flex flex-col h-[calc(100vh-160px)] bg-white rounded-lg shadow-md">
             <div className="p-4 border-b">
                 <h2 className="text-2xl font-bold text-center">MediClarity AI Scheduler</h2>
-                <p className="text-sm text-gray-600 text-center">I can help you find the right doctor and book your next appointment.</p>
+                <p className="text-sm text-gray-600 text-center">
+                    I can help you find the right doctor. A booking is complete only after you select Schedule Appointment.
+                </p>
             </div>
 
             <div ref={chatContainerRef} className="flex-1 p-4 space-y-4 overflow-y-auto bg-gray-50">

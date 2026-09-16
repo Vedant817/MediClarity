@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   boundedSchedulerMessages,
   compactSchedulerReports,
+  guardUnverifiedBookingClaim,
 } from "../src/lib/scheduler-context.ts";
 
 test("scheduler report context is bounded", () => {
@@ -24,4 +25,20 @@ test("scheduler keeps newest conversation turns within budget", () => {
   assert.ok(bounded.length <= 10);
   assert.ok(bounded.reduce((total, message) => total + message.content.length, 0) <= 6_000);
   assert.match(bounded.at(-1).content, /^11:/);
+});
+
+test("scheduler blocks confirmation claims without a booking payload", () => {
+  const guarded = guardUnverifiedBookingClaim(
+    "Your appointment is confirmed! We'll send you a reminder shortly.",
+  );
+  assert.match(guarded, /has not been booked yet/i);
+  assert.doesNotMatch(guarded, /reminder/i);
+});
+
+test("scheduler preserves a valid proposal but does not call it booked", () => {
+  const payload = 'BOOKING_READY {"providerId":"dr-smith","date":"2026-09-17","time":"10:00"}';
+  const guarded = guardUnverifiedBookingClaim(`Your appointment is confirmed!\n${payload}`);
+  assert.match(guarded, /Select Schedule Appointment/i);
+  assert.match(guarded, /BOOKING_READY/);
+  assert.doesNotMatch(guarded, /appointment is confirmed/i);
 });

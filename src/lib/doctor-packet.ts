@@ -31,6 +31,8 @@ export function cleanPacketText(value: unknown): string {
   if (typeof value !== "string") return "";
   return value
     .replace(/\r\n?/g, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u2014\u2013]/g, "-")
@@ -419,4 +421,3 @@ export function buildDoctorPacket(pdf: PacketDoc, report: PacketReport): void {
     y += 13;
   }
 }
-

@@ -57,6 +57,7 @@ export function toPlainExcerpt(markdown: unknown, maxChars = 220): string {
     .replace(/^\s*[-*+]\s+/gm, "")
     .replace(/^\s*\d+[.)]\s+/gm, "")
     .replace(/^\s*>\s?/gm, "")
+    .replace(/<[^>]+>/g, " ")
     .replace(/\|/g, " ")
     .replace(/[#*_~]/g, "")
     .replace(/\s+/g, " ")

@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, LoaderCircle } from "lucide-react";
+import { Send, LoaderCircle, PlusCircle } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import clsx from "clsx";
 import { useUser } from "@clerk/nextjs";
@@ -94,6 +94,17 @@ const AIChatPage = () => {
         };
     }, [user, fetchSummaryAndOcr]);
 
+    const startNewChat = useCallback(() => {
+        const storageKey = "mediclarity-records-chat-session";
+        const newSessionId = uuidv4();
+        sessionIdRef.current = newSessionId;
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem(storageKey, newSessionId);
+        }
+        setMessages([]);
+        fetchSummaryAndOcr();
+    }, [fetchSummaryAndOcr]);
+
     const sendMessage = async () => {
         if (!input.trim() || !user || isLoadingData || !isSessionInitialized) return;
 
@@ -167,12 +178,29 @@ const AIChatPage = () => {
         <div className="flex flex-col h-screen w-full">
             <div className="flex-grow overflow-hidden">
                 <ScrollArea className="h-full w-full">
-                    <div className="container mx-auto px-4 py-6 space-y-4">
-                        <h1 className="text-2xl font-bold mb-4">💬 AI Medical Assistant</h1>
+                    <div className="container mx-auto px-4 py-6 space-y-4 max-w-4xl">
+                        <div className="flex items-center justify-between border-b pb-3 mb-4">
+                            <div>
+                                <h1 className="text-2xl font-bold">💬 Record Chat</h1>
+                                <p className="text-xs text-slate-500">Ask questions and discuss precautions based on your medical records</p>
+                            </div>
+                            {messages.length > 0 && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={startNewChat}
+                                    disabled={isThinking}
+                                    className="text-xs flex items-center gap-1.5"
+                                >
+                                    <PlusCircle className="w-3.5 h-3.5" />
+                                    New chat
+                                </Button>
+                            )}
+                        </div>
 
                         {messages.length === 0 && (
                             <div className="text-center text-gray-500 py-8">
-                                <p>Ask me anything about your medical report.</p>
+                                <p>Ask me anything about your medical reports, test results, or precautions.</p>
                                 {!isSessionInitialized && (
                                     <div className="mt-2 flex items-center justify-center gap-2">
                                         <LoaderCircle className="w-4 h-4 animate-spin" />
@@ -186,10 +214,10 @@ const AIChatPage = () => {
                             <div
                                 key={index}
                                 className={clsx(
-                                    "max-w-md px-4 py-2 rounded-lg whitespace-pre-wrap",
+                                    "px-4 py-3 rounded-lg shadow-sm",
                                     msg.role === "user"
-                                        ? "ml-auto bg-teal-100 text-teal-900"
-                                        : "mr-auto bg-gray-100 text-gray-800"
+                                        ? "ml-auto max-w-md md:max-w-lg bg-teal-100 text-teal-900 whitespace-pre-wrap"
+                                        : "mr-auto max-w-2xl lg:max-w-3xl w-full bg-slate-50 border border-slate-200 text-slate-800"
                                 )}
                             >
                                 <Markdown>{msg.content}</Markdown>
@@ -209,7 +237,7 @@ const AIChatPage = () => {
             </div>
 
             <div className="border-t p-4 bg-white shadow-sm">
-                <div className="container mx-auto flex gap-2">
+                <div className="container mx-auto flex gap-2 max-w-4xl">
                     <Input
                         aria-label="Message about medical report"
                         placeholder="Ask about your medical report..."

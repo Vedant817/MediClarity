@@ -9,7 +9,7 @@ import { auth } from "@clerk/nextjs/server";
 import { getLLM, invokeWithRetry, isTransientLLMError, llmContentToText } from "@/lib/llm";
 import { getAvailabilityWindow } from "@/lib/availability";
 import { appointmentTypeIds } from "@/lib/data";
-import { boundedSchedulerMessages, compactSchedulerReports } from "@/lib/scheduler-context";
+import { boundedSchedulerMessages, compactSchedulerReports, guardUnverifiedBookingClaim } from "@/lib/scheduler-context";
 
 export const runtime = "nodejs";
 const disclaimer = "For information only, not medical advice.";
@@ -98,8 +98,8 @@ export async function POST(req: NextRequest) {
         4.  **Format Suggestions:** After the conversational text, write SUGGESTED_DOCTORS followed by a JSON array. Every item must contain only id, name, specialty, and justification copied or derived from the supplied data.
         5.  **Handle User Preferences:** If the user selects a doctor, proceed with scheduling. If they want a different doctor, accommodate their request.
         6.  **Gather Scheduling Details:** Ask for the user's preferred date and time.
-        7.  **Final Confirmation:** Once a time is chosen, confirm all details.
-        8.  **Booking Ready:** When confirmed, write BOOKING_READY followed by one JSON object containing providerId, providerName, date, time, reason, and appointmentType. The providerId must exist in Available Providers, the exact date/time pair must exist in Verified Available Slots, and appointmentType must be copied from Allowed Appointment Types. Never claim the appointment is booked; the server performs final validation and booking.
+        7.  **Proposal Confirmation:** Once a time is chosen, ask whether the proposed details are correct. This does not book anything.
+        8.  **Booking Ready:** When the user confirms all details, write BOOKING_READY followed by one JSON object containing providerId, providerName, date, time, reason, and appointmentType. The providerId must exist in Available Providers, the exact date/time pair must exist in Verified Available Slots, and appointmentType must be copied from Allowed Appointment Types. Say only: "Your appointment details are ready. Select Schedule Appointment below to complete the booking." Never say or imply that an appointment is confirmed, booked, scheduled, or reserved, and never promise a reminder; only the authenticated server action can do those things.
         8a. **Booking Field Rules:** date must be YYYY-MM-DD copied from the matrix (never "tomorrow" or any other words); time must be HH:MM 24-hour copied from the matrix (e.g. "10:00", never "10AM"); reason must be at least 10 characters describing the visit; appointmentType must be exactly one id from Allowed Appointment Types (e.g. "check-up", never "checkup").
 
         **Interaction Style:**
@@ -132,6 +132,7 @@ export async function POST(req: NextRequest) {
         const response = await invokeWithRetry(() => model.invoke(langchainMessages));
         let fullResponse = llmContentToText(response.content).trim();
         if (!fullResponse) throw new Error("AI provider returned an empty scheduler response");
+        fullResponse = guardUnverifiedBookingClaim(fullResponse);
         if (!fullResponse.includes(disclaimer)) fullResponse += `\n\n${disclaimer}`;
 
         conversation.messages.push({

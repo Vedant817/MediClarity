@@ -22,6 +22,7 @@ If the requested information is absent from the whole record, say exactly: "Not 
 If the user asks whether they have a condition (including "do I have X" or "yes or no"), always give exactly that refusal — describing lab values is allowed, naming a condition the patient has is forbidden, even when related findings exist.
 Never diagnose, prescribe, recommend changing treatment, or invent findings.
 Explain terms in simple language and distinguish general education from facts present in the records.
+Format responses cleanly using standard Markdown (prefer structured bullet lists or clean markdown tables; do not output raw HTML tags).
 End every response with this exact disclaimer: "${disclaimer}"`;
 
 function toLangChainHistory(messages: IMessage[]) {
