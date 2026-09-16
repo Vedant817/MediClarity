@@ -70,23 +70,21 @@ export default function ReportsPage() {
     const downloadDoctorPacket = async () => {
         if (!selectedReport) return
         const { jsPDF } = await import("jspdf")
+        const { buildDoctorPacket } = await import("@/lib/doctor-packet")
         const pdf = new jsPDF({ unit: "pt", format: "a4" })
-        const width = 500
-        let y = 54
-        pdf.setFontSize(20); pdf.text("MediClarity doctor packet", 46, y); y += 26
-        pdf.setFontSize(9); pdf.setTextColor(80); pdf.text(`Report date: ${new Date(selectedReport.createdAt).toLocaleDateString()}`, 46, y); y += 28
-        pdf.setTextColor(0); pdf.setFontSize(13); pdf.text("Abnormal structured results", 46, y); y += 18
-        const abnormal = selectedReport.labs?.filter((lab) => lab.flag === "high" || lab.flag === "low") ?? []
-        pdf.setFontSize(9)
-        for (const lab of abnormal) { pdf.text(`${lab.canonicalName}: ${lab.value} ${lab.unit || ""} (${lab.flag})`, 52, y); y += 14 }
-        if (abnormal.length === 0) { pdf.text("No abnormal structured rows available.", 52, y); y += 16 }
-        y += 10; pdf.setFontSize(13); pdf.text("Plain-language summary", 46, y); y += 18
-        pdf.setFontSize(9)
-        for (const line of pdf.splitTextToSize(selectedReport.summary.replace(/[#*_`]/g, ""), width)) { if (y > 760) { pdf.addPage(); y = 48 } pdf.text(line, 46, y); y += 12 }
-        y += 14; if (y > 700) { pdf.addPage(); y = 48 }
-        pdf.setFontSize(13); pdf.text("Questions to ask", 46, y); y += 18; pdf.setFontSize(9)
-        ;["Which results need follow-up?", "Should any test be repeated, and when?", "Do medicines or recent illness affect these results?"].forEach((question) => { pdf.text(`• ${question}`, 52, y); y += 14 })
-        y += 18; pdf.setTextColor(120); pdf.text("For information only, not medical advice or diagnosis. Verify all rows against the source report.", 46, y, { maxWidth: width })
+        buildDoctorPacket(pdf, {
+            createdAt: selectedReport.createdAt,
+            summary: selectedReport.summary,
+            labs: (selectedReport.labs ?? []).map((lab) => ({
+                canonicalName: lab.canonicalName ?? null,
+                test: lab.test,
+                value: lab.value,
+                unit: lab.unit ?? null,
+                refMin: lab.refMin ?? null,
+                refMax: lab.refMax ?? null,
+                flag: lab.flag,
+            })),
+        })
         pdf.save(`mediclarity-doctor-packet-${selectedReport._id}.pdf`)
     }
 
