@@ -152,6 +152,11 @@ export default function ConversationalScheduler() {
                 signal: abortControllerRef.current.signal,
             });
 
+            if (!response.ok) {
+                const failure = await response.json().catch(() => ({})) as { error?: string };
+                throw new Error(failure.error || `Scheduler request failed (${response.status})`);
+            }
+
             if (!response.body) {
                 throw new Error('No response body');
             }
@@ -220,11 +225,18 @@ export default function ConversationalScheduler() {
             }
             console.error('Error:', error);
             toast.error('Failed to get response from AI assistant');
-            setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                role: 'assistant' as const,
-                content: 'Sorry, I encountered an error processing your request. Please try again.',
-            }]);
+            setMessages(prev => {
+                // Drop the empty assistant placeholder so a retry starts clean
+                // and stale blanks are never saved to history.
+                const trimmed = prev.length > 0 && prev[prev.length - 1].role === 'assistant' && !prev[prev.length - 1].content.trim()
+                    ? prev.slice(0, -1)
+                    : prev;
+                return [...trimmed, {
+                    id: Date.now().toString(),
+                    role: 'assistant' as const,
+                    content: 'Sorry, I encountered an error processing your request. Please try again.',
+                }];
+            });
         } finally {
             setIsLoading(false);
         }

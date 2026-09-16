@@ -6,7 +6,7 @@ import Provider from "@/models/provider";
 import Conversation, { IMessage } from "@/models/conversation";
 import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { auth } from "@clerk/nextjs/server";
-import { getLLM, llmContentToText } from "@/lib/llm";
+import { getLLM, llmContentToText, isRateLimitError, rateLimitDelayMs } from "@/lib/llm";
 import { getAvailabilityWindow } from "@/lib/availability";
 import { appointmentTypeIds } from "@/lib/data";
 
@@ -70,6 +70,13 @@ export async function POST(req: NextRequest) {
             availability.timeSlots.filter((slot) => slot.available).map((slot) => ({ date, time: slot.time })));
         return { providerId: provider.id, slots };
     }));
+    // Keep the prompt small and truthful: only providers with at least one
+    // free slot reach the model, so it can neither invent times nor offer a
+    // slot that is already booked (booked times are excluded by
+    // getAvailabilityWindow and never appear here).
+    const providersWithOpenings = availableProviders.filter((provider) =>
+        providerAvailability.some((entry) => entry.providerId === provider.id && entry.slots.length > 0));
+    const openAvailability = providerAvailability.filter((entry) => entry.slots.length > 0);
 
     const systemInstruction = `You are a highly intelligent medical appointment scheduling assistant for MediClarity.
         Your primary goal is to help users schedule appointments with the most suitable doctors based on their needs, medical history, and preferences.
@@ -77,19 +84,21 @@ export async function POST(req: NextRequest) {
         **User's Medical Context:**
         - **Recent Reports:** ${JSON.stringify(recentReports)}
         - **Past Appointments:** ${JSON.stringify(pastAppointments)}
-        - **Available Providers:** ${JSON.stringify(availableProviders)}
-        - **Verified Available Slots (next 14 days):** ${JSON.stringify(providerAvailability)}
+        - **Available Providers:** ${JSON.stringify(providersWithOpenings)}
+        - **Verified Available Slots (next 14 days):** ${JSON.stringify(openAvailability)}
         - **Allowed Appointment Types:** ${JSON.stringify(appointmentTypeIds)}
 
         **Your Task Flow:**
         1.  **Analyze the User's Request:** Carefully read the user's message to understand their current issue, symptoms, or desired appointment type.
         2.  **Synthesize Medical Context:** Cross-reference the user's request with their medical context to identify relevant history, conditions, and previous providers.
         3.  **Suggest Doctors:** Suggest only doctors present in "Available Providers" who have at least one verified slot. Never invent, rename, or alter an id, name, specialty, date, or time. If none qualify, say no configured provider is currently available.
+        3a. **List Only Free Slots:** The slot matrix contains ONLY free times — every entry is bookable, and anything absent (including already-booked appointments) must never be offered. When asked for a doctor's availability, list the exact date/time pairs from the matrix and nothing else.
         4.  **Format Suggestions:** After the conversational text, write SUGGESTED_DOCTORS followed by a JSON array. Every item must contain only id, name, specialty, and justification copied or derived from the supplied data.
         5.  **Handle User Preferences:** If the user selects a doctor, proceed with scheduling. If they want a different doctor, accommodate their request.
         6.  **Gather Scheduling Details:** Ask for the user's preferred date and time.
         7.  **Final Confirmation:** Once a time is chosen, confirm all details.
         8.  **Booking Ready:** When confirmed, write BOOKING_READY followed by one JSON object containing providerId, providerName, date, time, reason, and appointmentType. The providerId must exist in Available Providers, the exact date/time pair must exist in Verified Available Slots, and appointmentType must be copied from Allowed Appointment Types. Never claim the appointment is booked; the server performs final validation and booking.
+        8a. **Booking Field Rules:** date must be YYYY-MM-DD copied from the matrix (never "tomorrow" or any other words); time must be HH:MM 24-hour copied from the matrix (e.g. "10:00", never "10AM"); reason must be at least 10 characters describing the visit; appointmentType must be exactly one id from Allowed Appointment Types (e.g. "check-up", never "checkup").
 
         **Interaction Style:**
         - Be empathetic, professional, and conversational.
@@ -119,14 +128,26 @@ export async function POST(req: NextRequest) {
         const stream = new ReadableStream({
             async start(controller) {
                 try {
-                    const response = await model.stream(langchainMessages);
+                    // Transient Groq free-tier failures (429/overload) must not
+                    // kill a booking turn: retry while nothing has streamed yet.
+                    // Once the first chunk is out, the response is committed.
                     let fullResponse = '';
-
-                    for await (const chunk of response) {
-                        const content = llmContentToText(chunk.content);
-                        if (!content) continue;
-                        controller.enqueue(encoder.encode(content));
-                        fullResponse += content;
+                    let started = false;
+                    for (let attempt = 0; attempt <= 2; attempt += 1) {
+                        try {
+                            fullResponse = '';
+                            for await (const chunk of await model.stream(langchainMessages)) {
+                                const content = llmContentToText(chunk.content);
+                                if (!content) continue;
+                                started = true;
+                                controller.enqueue(encoder.encode(content));
+                                fullResponse += content;
+                            }
+                            break;
+                        } catch (error) {
+                            if (started || !isRateLimitError(error) || attempt === 2) throw error;
+                            await new Promise((resolve) => setTimeout(resolve, rateLimitDelayMs(error, attempt)));
+                        }
                     }
 
                     if (!fullResponse.trim()) {
@@ -148,6 +169,7 @@ export async function POST(req: NextRequest) {
 
                     controller.close();
                 } catch (error) {
+                    console.error("AI scheduler stream failed:", error);
                     controller.error(error);
                 }
             },
