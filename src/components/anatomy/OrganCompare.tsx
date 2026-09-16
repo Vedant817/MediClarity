@@ -1,12 +1,12 @@
 "use client";
 
-import { Component, Suspense, useMemo, useState, type ReactNode } from "react";
+import { Component, Suspense, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
-import { Canvas, useLoader } from "@react-three/fiber";
+import { Canvas, useFrame, useLoader } from "@react-three/fiber";
 import { Html, OrbitControls } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import { Activity } from "lucide-react";
+import { Activity, MapPin } from "lucide-react";
 import CaptionBlock from "./CaptionBlock";
 import OrganRedFlags from "./OrganRedFlags";
 import {
@@ -15,6 +15,7 @@ import {
   type OrganModelEntry,
   type VisualizationSuggestion,
 } from "@/lib/anatomy/types";
+import { getHighlightMeaning, matchDrivingLabs, type DrivingLab } from "@/lib/anatomy/highlight-info";
 import { resolveHotspot, shouldRenderMesh } from "@/lib/anatomy/viewer";
 
 export type OrganCompareProps = {
@@ -22,6 +23,11 @@ export type OrganCompareProps = {
   suggestion: Pick<VisualizationSuggestion, "subRegion" | "relatedTo" | "confidence" | "evidence">;
   /** Plain-language caption, e.g. derived from the report summary. */
   caption: string;
+  /**
+   * Abnormal structured labs for the "why highlighted" card. Matched
+   * conservatively against quoted evidence — see matchDrivingLabs.
+   */
+  labs?: DrivingLab[];
   /**
    * User hand-picked this organ (not system-suggested): the badge reads
    * "Manual choice" instead of a relevance percentage, which would be
@@ -71,16 +77,28 @@ function LesionMarker({
   position,
   label,
   opacity,
+  pulse,
 }: {
   position: [number, number, number];
   label: string;
   opacity: number;
+  /** Gentle glow pulse (organ "activity" cue, cf. Human-Organ3D). Off when the user disables motion. */
+  pulse: boolean;
 }) {
+  const material = useRef<THREE.MeshStandardMaterial>(null);
+  useFrame(({ clock }) => {
+    if (material.current) {
+      material.current.emissiveIntensity = pulse
+        ? 0.65 + 0.3 * Math.sin(clock.elapsedTime * 2.4)
+        : 0.85;
+    }
+  });
   return (
     <group position={position}>
       <mesh>
         <sphereGeometry args={[0.24, 24, 24]} />
         <meshStandardMaterial
+          ref={material}
           color="#e11d48"
           emissive="#e11d48"
           emissiveIntensity={0.85}
@@ -141,7 +159,12 @@ function OrganCanvas({
       <Suspense fallback={<CanvasLoader />}>
         <NormalizedModel url={url} />
         {affected ? (
-          <LesionMarker position={hotspot.position} label={hotspot.label} opacity={lesionOpacity} />
+          <LesionMarker
+            position={hotspot.position}
+            label={hotspot.label}
+            opacity={lesionOpacity}
+            pulse={autoRotate}
+          />
         ) : null}
       </Suspense>
       <OrbitControls
@@ -207,13 +230,19 @@ function PlaceholderCard({ entry, suggestion, caption, allowTranslate = false }:
         </p>
       ) : null}
       {hotspots.length > 0 ? (
-        <ul className="mt-3 space-y-1 text-sm text-slate-600">
-          {hotspots.map((hotspot) => (
-            <li key={hotspot.label} className="flex gap-2">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-600" aria-hidden="true" />
-              {hotspot.label}
-            </li>
-          ))}
+        <ul className="mt-3 space-y-2 text-sm text-slate-600">
+          {hotspots.map((hotspot) => {
+            const key = Object.entries(entry.hotspots).find(([, value]) => value === hotspot)?.[0] ?? "";
+            return (
+              <li key={hotspot.label} className="flex gap-2">
+                <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-600" aria-hidden="true" />
+                <span>
+                  <strong className="font-semibold text-slate-800">{hotspot.label}.</strong>{" "}
+                  {getHighlightMeaning(entry.organId, key)}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       <p className="mt-3 font-mono text-[11px] text-slate-500">
@@ -260,7 +289,7 @@ function LoadErrorCard({ entry, suggestion, caption, allowTranslate = false, onR
 }
 
 export default function OrganCompare(props: OrganCompareProps) {
-  const { entry, suggestion, caption, manual = false, allowTranslate = false } = props;
+  const { entry, suggestion, caption, manual = false, allowTranslate = false, labs = [] } = props;
   const [autoRotate, setAutoRotate] = useState(
     () =>
       typeof window === "undefined" ||
@@ -270,6 +299,10 @@ export default function OrganCompare(props: OrganCompareProps) {
   const [sourceIndex, setSourceIndex] = useState(0);
   const [failed, setFailed] = useState(false);
   const [webgl] = useState(hasWebGL);
+  // One viewer, two modes. Two simultaneous WebGL canvases doubled GPU
+  // memory and GLB decoding and could leave one panel blank; a toggle
+  // also gives the single stage room to breathe.
+  const [mode, setMode] = useState<"affected" | "healthy">("affected");
 
   const hotspot = useMemo(
     () => resolveHotspot(entry, suggestion.subRegion ?? null),
@@ -299,26 +332,9 @@ export default function OrganCompare(props: OrganCompareProps) {
     if (sourceIndex < sources.length - 1) setSourceIndex(sourceIndex + 1);
     else setFailed(true);
   };
-
-  const canvases = (affected: boolean, title: string, titleClass: string, borderClass: string) => (
-    <figure className={`overflow-hidden rounded-2xl border bg-slate-50 ${borderClass}`}>
-      <figcaption className={`border-b bg-white px-4 py-2 font-mono text-[11px] uppercase tracking-widest ${titleClass}`}>
-        {title}
-      </figcaption>
-      <div className="h-72">
-        <CanvasErrorBoundary key={`${url}-${affected ? "affected" : "healthy"}`} onError={advanceSource}>
-          <OrganCanvas
-            url={url}
-            camera={entry.camera}
-            autoRotate={autoRotate}
-            affected={affected}
-            hotspot={hotspot}
-            lesionOpacity={lesionOpacity}
-          />
-        </CanvasErrorBoundary>
-      </div>
-    </figure>
-  );
+  const affected = mode === "affected";
+  const meaning = getHighlightMeaning(entry.organId, hotspot.key);
+  const drivingLabs = matchDrivingLabs(labs, suggestion.evidence);
 
   return (
     <div className="space-y-4">
@@ -342,12 +358,86 @@ export default function OrganCompare(props: OrganCompareProps) {
       </div>
 
       <p className="sr-only">
-        3D illustration of {ORGAN_DISPLAY_NAMES[entry.organId]} for education: {hotspot.label} highlighted.
+        3D illustration of {ORGAN_DISPLAY_NAMES[entry.organId]} for education: {hotspot.label} highlighted
+        in the affected view. Use the comparison control to switch between healthy and affected views.
       </p>
-      <div className="grid gap-4 md:grid-cols-2">
-        {canvases(false, "Healthy reference", "text-slate-500 border-slate-200", "border-slate-200")}
-        {canvases(true, "Illustrative affected area", "text-rose-700 border-rose-200", "border-rose-200")}
+
+      <section
+        aria-label="Why this area is highlighted"
+        className="rounded-xl border border-rose-200 bg-rose-50/70 p-4"
+      >
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-rose-950">
+          <MapPin className="h-4 w-4" aria-hidden="true" />
+          Why this area is highlighted
+        </h4>
+        <p className="mt-1 text-sm leading-6 text-rose-950">{meaning}</p>
+        {drivingLabs.length > 0 ? (
+          <ul className="mt-2 flex flex-wrap gap-2" aria-label="Abnormal results behind this illustration">
+            {drivingLabs.map((lab) => (
+              <li
+                key={lab.test}
+                className={`rounded-full border bg-white px-2.5 py-1 font-mono text-[11px] font-semibold ${
+                  lab.flag === "high" ? "border-rose-300 text-rose-700" : "border-amber-300 text-amber-800"
+                }`}
+              >
+                {lab.test}: {lab.value}
+                {lab.unit ? ` ${lab.unit}` : ""} · {lab.flag}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+
+      <div
+        className="inline-flex gap-1 self-start rounded-full border border-slate-200 bg-white p-1"
+        role="group"
+        aria-label="Comparison view"
+      >
+        {(
+          [
+            { value: "affected", label: "Affected illustration" },
+            { value: "healthy", label: "Healthy reference" },
+          ] as const
+        ).map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => setMode(option.value)}
+            aria-pressed={mode === option.value}
+            className={`rounded-full px-3 py-1 font-mono text-[11px] font-semibold ${
+              mode === option.value
+                ? option.value === "affected"
+                  ? "bg-rose-700 text-white"
+                  : "bg-teal-700 text-white"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
+
+      <figure className={`overflow-hidden rounded-2xl border bg-slate-50 ${affected ? "border-rose-200" : "border-slate-200"}`}>
+        <figcaption
+          className={`border-b bg-white px-4 py-2 font-mono text-[11px] uppercase tracking-widest ${
+            affected ? "border-rose-200 text-rose-700" : "border-slate-200 text-slate-500"
+          }`}
+        >
+          {affected ? "Illustrative affected area" : "Healthy reference"}
+        </figcaption>
+        <div className="h-80">
+          <CanvasErrorBoundary key={`${url}-${mode}`} onError={advanceSource}>
+            <OrganCanvas
+              url={url}
+              camera={entry.camera}
+              autoRotate={autoRotate}
+              affected={affected}
+              hotspot={hotspot}
+              lesionOpacity={lesionOpacity}
+            />
+          </CanvasErrorBoundary>
+        </div>
+      </figure>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
         <label className="flex items-center gap-2 text-sm text-slate-600">

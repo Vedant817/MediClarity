@@ -185,6 +185,12 @@ export default function ReportVisualize({ reportId, summary, labs = [] }: { repo
           suggestion={suggestion}
           caption={caption}
           allowTranslate
+          labs={abnormalLabs.map((lab) => ({
+            test: lab.canonicalName || lab.test,
+            value: lab.value,
+            unit: lab.unit,
+            flag: lab.flag,
+          }))}
         />
       ))}
       {manualSuggestion && (
