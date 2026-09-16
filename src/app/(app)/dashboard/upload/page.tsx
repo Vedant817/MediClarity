@@ -1,5 +1,5 @@
 "use client"
-import { useState, ChangeEvent, useEffect, useCallback } from "react";
+import { useState, ChangeEvent, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, File, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,8 @@ export default function UploadReportPage() {
     const [summary, setSummary] = useState<string | null>(null);
     const [selectedLang, setSelectedLang] = useState('en');
     const [translatedSummary, setTranslatedSummary] = useState('');
+    const [translating, setTranslating] = useState(false);
+    const translateRequestRef = useRef(0);
     const [sourceLab, setSourceLab] = useState('');
     const [sourceCountry, setSourceCountry] = useState('');
     const [reportDate, setReportDate] = useState('');
@@ -47,6 +49,8 @@ export default function UploadReportPage() {
         setOcrResult(null);
         setSummary(null);
         setTranslatedSummary('');
+        setTranslating(false);
+        translateRequestRef.current += 1;
         setQuotaExhausted(false);
     };
 
@@ -127,21 +131,34 @@ export default function UploadReportPage() {
         const lang = value;
         setSelectedLang(lang);
 
-        if (summary) {
-            try {
-                const response = await fetch('/api/translate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ text: summary, targetLang: lang }),
-                });
+        if (!summary) return;
+        // English is the source language: show it instantly without a model call.
+        if (lang === 'en') {
+            translateRequestRef.current += 1;
+            setTranslating(false);
+            setTranslatedSummary(summary);
+            return;
+        }
 
-                const data = await response.json();
-                setTranslatedSummary(data.translatedText);
-            } catch (error) {
-                console.error('Translation error:', error);
-            }
+        const requestId = ++translateRequestRef.current;
+        setTranslating(true);
+        try {
+            const response = await fetch('/api/translate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ text: summary, targetLang: lang }),
+            });
+
+            const data = await response.json();
+            // Ignore stale responses when the user picked another language mid-flight.
+            if (requestId !== translateRequestRef.current) return;
+            if (response.ok) setTranslatedSummary(data.translatedText);
+        } catch (error) {
+            console.error('Translation error:', error);
+        } finally {
+            if (requestId === translateRequestRef.current) setTranslating(false);
         }
     }, [summary]);
 
@@ -230,6 +247,7 @@ export default function UploadReportPage() {
                             summary={summary}
                             translatedSummary={translatedSummary}
                             selectedLang={selectedLang}
+                            translating={translating}
                             onLanguageChange={(value) => void handleLanguageChange(value)}
                             ocrResult={ocrResult}
                         />

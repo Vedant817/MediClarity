@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import Markdown from "@/components/Markdown";
 import ChatWithAI from "@/components/ChatWithAI";
 import TextToSpeechButton from "@/components/TextToSpeechButton";
@@ -28,6 +29,7 @@ type UploadResultsProps = {
     summary: string;
     translatedSummary: string;
     selectedLang: string;
+    translating?: boolean;
     onLanguageChange: (value: string) => void;
     ocrResult: string | null;
 };
@@ -41,6 +43,7 @@ export default function UploadResults({
     summary,
     translatedSummary,
     selectedLang,
+    translating = false,
     onLanguageChange,
     ocrResult,
 }: UploadResultsProps) {
@@ -49,11 +52,19 @@ export default function UploadResults({
     return (
         <>
             <div className="space-y-4 p-4">
-                <div className="space-y-2 rounded-md bg-yellow-50 p-3">
+                <div className="relative space-y-2 rounded-md bg-yellow-50 p-3" aria-busy={translating}>
                     <p className="text-sm font-medium text-yellow-800">Summary:</p>
-                    <pre className="whitespace-pre-wrap text-xs text-yellow-700">
+                    <pre className={`whitespace-pre-wrap text-xs text-yellow-700 transition-opacity ${translating ? "opacity-50" : ""}`}>
                         <Markdown>{translatedSummary || summary}</Markdown>
                     </pre>
+                    {translating && (
+                        <div className="absolute inset-0 grid place-items-center rounded-md bg-yellow-50/60" role="status">
+                            <span className="flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-yellow-800 shadow-sm">
+                                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                                <span className="sr-only">Translating summary…</span>
+                            </span>
+                        </div>
+                    )}
                 </div>
                 {!showChat && (
                     <div className="flex gap-2 w-full">
@@ -67,7 +78,7 @@ export default function UploadResults({
                             <TextToSpeechButton text={translatedSummary || summary} lang={selectedLang} />
                         </div>
                         <div className="flex w-full items-center gap-2">
-                            <Select value={selectedLang} onValueChange={onLanguageChange} >
+                            <Select value={selectedLang} onValueChange={onLanguageChange} disabled={translating}>
                                 <SelectTrigger className="w-full" aria-label="Summary language">
                                     <SelectValue placeholder="Select a language" />
                                 </SelectTrigger>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 
 /**
  * Report caption with an opt-in Hindi translation. English renders
@@ -64,7 +65,15 @@ export default function CaptionBlock({
       )}
       {lang === "hi" ? (
         translating ? (
-          <p className="animate-pulse text-sm leading-6 text-slate-400" lang="hi">अनुवाद हो रहा है…</p>
+          <div className="space-y-2" role="status" aria-busy="true">
+            <span className="sr-only">Translating caption…</span>
+            <div className="flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin text-teal-700" aria-hidden="true" />
+              <div className="h-3 flex-1 animate-pulse rounded bg-slate-200" aria-hidden="true" />
+            </div>
+            <div className="h-3 w-4/5 animate-pulse rounded bg-slate-200" aria-hidden="true" />
+            <div className="h-3 w-3/5 animate-pulse rounded bg-slate-200" aria-hidden="true" />
+          </div>
         ) : translated ? (
           <p className="text-sm leading-6 text-slate-600" lang="hi">
             {translated}
