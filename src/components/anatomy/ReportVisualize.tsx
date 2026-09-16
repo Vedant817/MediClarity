@@ -189,6 +189,8 @@ export default function ReportVisualize({ reportId, summary, labs = [] }: { repo
             test: lab.canonicalName || lab.test,
             value: lab.value,
             unit: lab.unit,
+            refMin: lab.refMin,
+            refMax: lab.refMax,
             flag: lab.flag,
           }))}
         />

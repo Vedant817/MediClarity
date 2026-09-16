@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { MODEL_REGISTRY } from "../src/lib/anatomy/registry.ts";
 import { ORGAN_IDS } from "../src/lib/anatomy/types.ts";
-import { stableModelScale } from "../src/lib/anatomy/viewer.ts";
+import { canShowReportMarker, stableModelScale } from "../src/lib/anatomy/viewer.ts";
 import {
   ORGAN_HIGHLIGHT_INFO,
+  buildDoctorQuestions,
   getHighlightMeaning,
   matchDrivingLabs,
 } from "../src/lib/anatomy/highlight-info.ts";
@@ -62,6 +63,24 @@ test("matchDrivingLabs handles short spans and avoids false positives", () => {
   assert.deepEqual(matchDrivingLabs(labs, ["patient feels tired"]), []);
 });
 
+test("matchDrivingLabs ignores generic words in multi-word test names", () => {
+  const labs = [
+    { test: "Total Cholesterol", value: 240, unit: "mg/dL", flag: "high" },
+    { test: "White Blood Cell Count", value: 14, unit: "10^3/uL", flag: "high" },
+  ];
+  assert.deepEqual(matchDrivingLabs(labs, ["total protein was reviewed", "white coating noted"]), []);
+  assert.deepEqual(matchDrivingLabs(labs, ["total cholesterol 240"]).map((lab) => lab.test), ["Total Cholesterol"]);
+});
+
+test("matchDrivingLabs does not cross-match sibling analytes", () => {
+  const labs = [
+    { test: "Total Cholesterol", value: 240, unit: "mg/dL", flag: "high" },
+    { test: "LDL Cholesterol", value: 170, unit: "mg/dL", flag: "high" },
+    { test: "HDL Cholesterol", value: 35, unit: "mg/dL", flag: "low" },
+  ];
+  assert.deepEqual(matchDrivingLabs(labs, ["LDL cholesterol 170"]).map((lab) => lab.test), ["LDL Cholesterol"]);
+});
+
 test("stableModelScale fits flat and tall organs without a runtime viewport", () => {
   // Flat pancreas-like box is width-bound.
   assert.ok(Math.abs(stableModelScale({ x: 0.17, y: 0.057, z: 0.08 }) - 3 / 0.17) < 1e-9);
@@ -74,4 +93,24 @@ test("stableModelScale fits flat and tall organs without a runtime viewport", ()
 test("stableModelScale never vanishes on bad input", () => {
   assert.equal(stableModelScale({ x: 0, y: 0, z: 0 }), 1);
   assert.equal(stableModelScale({ x: NaN, y: 1, z: 1 }), 1);
+});
+
+test("report markers require evidence and never appear for manual exploration", () => {
+  assert.equal(canShowReportMarker(false, ["Creatinine 1.9 mg/dL"], true), true);
+  assert.equal(canShowReportMarker(false, ["Creatinine 1.9 mg/dL"], false), false);
+  assert.equal(canShowReportMarker(false, [], true), false);
+  assert.equal(canShowReportMarker(false, ["  "], true), false);
+  assert.equal(canShowReportMarker(true, ["Creatinine 1.9 mg/dL"], true), false);
+});
+
+test("doctor questions remain deterministic and non-diagnostic", () => {
+  const questions = buildDoctorQuestions("Cortex", [
+    { test: "Creatinine", value: 1.9, unit: "mg/dL", flag: "high" },
+  ]);
+  assert.equal(questions.length, 3);
+  assert.match(questions[0], /Creatinine/);
+  assert.doesNotMatch(questions.join(" "), /you have|diagnos|disease/i);
+
+  const anatomyQuestions = buildDoctorQuestions("Cortex", []);
+  assert.match(anatomyQuestions[0], /Cortex/);
 });

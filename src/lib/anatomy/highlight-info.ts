@@ -131,12 +131,38 @@ export function getHighlightMeaning(organId: OrganId, subRegionKey: string): str
   return info.regions[subRegionKey] ?? info.summary;
 }
 
+export function getOrganSummary(organId: OrganId): string {
+  return ORGAN_HIGHLIGHT_INFO[organId].summary;
+}
+
 export type DrivingLab = {
   test: string;
   value: number | string;
   unit?: string | null;
+  refMin?: number;
+  refMax?: number;
   flag: string;
 };
+
+/** Deterministic prompts patients can take to a clinician; no diagnosis generation. */
+export function buildDoctorQuestions(
+  regionLabel: string,
+  labs: DrivingLab[],
+): string[] {
+  if (labs.length > 0) {
+    const names = labs.slice(0, 2).map((lab) => lab.test).join(" and ");
+    return [
+      `What do my ${names} results mean in the context of the rest of my report?`,
+      "Should these results be repeated or monitored, and when?",
+      "Could medicines, hydration, diet, or my medical history affect these results?",
+    ];
+  }
+  return [
+    `What does the report wording connected with the ${regionLabel} mean in my context?`,
+    "Does this need follow-up, monitoring, or another test?",
+    "Which symptoms should make me seek care sooner?",
+  ];
+}
 
 /**
  * Which abnormal labs plausibly drive this illustration: an abnormal lab
@@ -150,18 +176,20 @@ export function matchDrivingLabs(
   evidence: string[],
 ): DrivingLab[] {
   if (!labs || labs.length === 0 || evidence.length === 0) return [];
-  const spans = evidence.map((span) => span.toLowerCase());
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const specimenTokens = new Set(["arterial", "plasma", "serum", "venous"]);
+  const spans = evidence.map(normalize);
   return labs.filter((lab) => {
     if (lab.flag !== "high" && lab.flag !== "low") return false;
-    const name = lab.test.toLowerCase();
-    const firstToken = name.split(/[^a-z0-9]+/).filter(Boolean)[0] ?? "";
+    const name = normalize(lab.test);
+    const analyteTokens = name
+      .split(" ")
+      .filter((token) => token.length >= 2 && !specimenTokens.has(token));
     return spans.some((span) => {
       if (span.length < 3 || name.length < 3) return false;
       if (span.includes(name)) return true;
-      if (firstToken.length >= 3 && span.includes(firstToken)) return true;
-      // Short quoted span (e.g. "tsh 9.4") contained in the test name.
-      if (span.length >= 3 && span.length <= 24 && name.includes(span)) return true;
-      return false;
+      const spanTokens = new Set(span.split(" "));
+      return analyteTokens.length > 0 && analyteTokens.every((token) => spanTokens.has(token));
     });
   });
 }

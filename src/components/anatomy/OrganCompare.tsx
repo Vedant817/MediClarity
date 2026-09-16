@@ -1,12 +1,13 @@
 "use client";
 
-import { Component, Suspense, useMemo, useState, type ReactNode } from "react";
+import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
-import { Canvas, useLoader } from "@react-three/fiber";
+import { Canvas, useLoader, useThree } from "@react-three/fiber";
 import { Html, OrbitControls } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import { Activity, MapPin, RotateCcw } from "lucide-react";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { Activity, ArrowLeftRight, Eye, Focus, MapPin, Quote, RotateCcw } from "lucide-react";
 import CaptionBlock from "./CaptionBlock";
 import OrganRedFlags from "./OrganRedFlags";
 import {
@@ -15,8 +16,14 @@ import {
   type OrganModelEntry,
   type VisualizationSuggestion,
 } from "@/lib/anatomy/types";
-import { getHighlightMeaning, matchDrivingLabs, type DrivingLab } from "@/lib/anatomy/highlight-info";
-import { resolveHotspot, shouldRenderMesh, stableModelScale } from "@/lib/anatomy/viewer";
+import {
+  buildDoctorQuestions,
+  getHighlightMeaning,
+  getOrganSummary,
+  matchDrivingLabs,
+  type DrivingLab,
+} from "@/lib/anatomy/highlight-info";
+import { canShowReportMarker, resolveHotspot, shouldRenderMesh, stableModelScale } from "@/lib/anatomy/viewer";
 
 export type OrganCompareProps = {
   entry: OrganModelEntry;
@@ -77,52 +84,47 @@ function NormalizedModel({
     box.getCenter(center);
     return { offset: center.multiplyScalar(-1), scale: stableModelScale(size) };
   }, [scene]);
-  // Marker lives INSIDE the normalized group so it tracks the mesh at any
-  // scale/center. Registry positions are mesh-local units; the radius is
-  // derived from the fitted scale so the pin renders at a constant 0.24
-  // world units on every organ.
-  const markerRadius = 0.24 / transform.scale;
+  const markerPosition = useMemo<[number, number, number] | null>(() => {
+    if (!hotspot) return null;
+    const point = new THREE.Vector3(...hotspot.position)
+      .add(transform.offset)
+      .multiplyScalar(transform.scale);
+    point.z += 0.04;
+    return [point.x, point.y, point.z];
+  }, [hotspot, transform]);
   return (
-    <group scale={transform.scale}>
-      {/* Translation must be inside the scaled group so the model center is
-          exactly at the OrbitControls target: scale * (point - center). */}
-      <group position={transform.offset}>
-        <primitive object={scene} />
-        {showMarker && hotspot ? (
-          <LesionMarker
-            position={hotspot.position}
-            opacity={markerOpacity}
-            radius={markerRadius}
-          />
-        ) : null}
+    <>
+      <group scale={transform.scale}>
+        {/* Translation must be inside the scaled group so the model center is
+            exactly at the OrbitControls target: scale * (point - center). */}
+        <group position={transform.offset}>
+          <primitive object={scene} />
+        </group>
       </group>
-    </group>
+      {showMarker && markerPosition ? (
+        <LesionMarker position={markerPosition} opacity={markerOpacity} />
+      ) : null}
+    </>
   );
 }
 
 function LesionMarker({
   position,
   opacity,
-  radius,
 }: {
   position: [number, number, number];
   opacity: number;
-  /** Mesh-local radius; caller derives it from organ size for uniform pins. */
-  radius: number;
 }) {
   return (
     <group position={position}>
-      <mesh>
-        <sphereGeometry args={[radius, 24, 24]} />
-        <meshStandardMaterial
-          color="#e11d48"
-          emissive="#e11d48"
-          emissiveIntensity={0.85}
-          transparent
-          opacity={opacity}
-          depthWrite={false}
-        />
-      </mesh>
+      <Html center occlude zIndexRange={[20, 0]}>
+        <span
+          className="pointer-events-none grid size-4 place-items-center rounded-full border border-white bg-rose-700 font-mono text-[9px] font-bold leading-none text-white shadow-sm"
+          style={{ opacity }}
+        >
+          1
+        </span>
+      </Html>
     </group>
   );
 }
@@ -137,15 +139,75 @@ function CanvasLoader() {
   );
 }
 
+type PanelId = "reference" | "guided";
+type CameraView = {
+  position: [number, number, number];
+  source: PanelId | "preset";
+  revision: number;
+};
+
+function SynchronizedControls({
+  panelId,
+  view,
+  zoomEnabled,
+  onViewChange,
+}: {
+  panelId: PanelId;
+  view: CameraView;
+  zoomEnabled: boolean;
+  onViewChange: (source: PanelId, position: [number, number, number]) => void;
+}) {
+  const controls = useRef<OrbitControlsImpl>(null);
+  const camera = useThree((state) => state.camera);
+  const invalidate = useThree((state) => state.invalidate);
+  const applyingSharedView = useRef(false);
+
+  useEffect(() => {
+    if (view.source === panelId) return;
+    applyingSharedView.current = true;
+    camera.position.set(...view.position);
+    controls.current?.target.set(0, 0, 0);
+    controls.current?.update();
+    invalidate();
+    applyingSharedView.current = false;
+  }, [camera, invalidate, panelId, view]);
+
+  return (
+    <OrbitControls
+      ref={controls}
+      target={[0, 0, 0]}
+      enablePan={false}
+      enableZoom={zoomEnabled}
+      enableDamping={false}
+      minPolarAngle={0.2}
+      maxPolarAngle={Math.PI - 0.2}
+      rotateSpeed={0.65}
+      zoomSpeed={0.7}
+      minDistance={2.75}
+      maxDistance={4.5}
+      onChange={() => {
+        if (applyingSharedView.current) return;
+        onViewChange(panelId, [camera.position.x, camera.position.y, camera.position.z]);
+      }}
+    />
+  );
+}
+
 function OrganCanvas({
   url,
   camera,
+  panelId,
+  view,
+  onViewChange,
   affected,
   hotspot,
   lesionOpacity,
 }: {
   url: string;
   camera: OrganModelEntry["camera"];
+  panelId: PanelId;
+  view: CameraView;
+  onViewChange: (source: PanelId, position: [number, number, number]) => void;
   affected: boolean;
   hotspot: { label: string; position: [number, number, number] };
   lesionOpacity: number;
@@ -164,7 +226,7 @@ function OrganCanvas({
       <Canvas
         dpr={[1, 2]}
         frameloop="demand"
-        camera={{ position: camera.position, fov: camera.fov }}
+        camera={{ position: view.position, fov: camera.fov }}
         gl={{ antialias: true, alpha: true }}
         style={{ background: "transparent" }}
         onCreated={() => setBooted(true)}
@@ -180,17 +242,11 @@ function OrganCanvas({
             markerOpacity={lesionOpacity}
           />
         </Suspense>
-        <OrbitControls
-          target={[0, 0, 0]}
-          enablePan={false}
-          enableZoom={interactive}
-          enableDamping={false}
-          minPolarAngle={0.2}
-          maxPolarAngle={Math.PI - 0.2}
-          rotateSpeed={0.65}
-          zoomSpeed={0.7}
-          minDistance={2.75}
-          maxDistance={4.5}
+        <SynchronizedControls
+          panelId={panelId}
+          view={view}
+          zoomEnabled={interactive}
+          onViewChange={onViewChange}
         />
         {!booted ? (
           <Html center zIndexRange={[50, 0]}>
@@ -324,9 +380,11 @@ export default function OrganCompare(props: OrganCompareProps) {
   const [sourceIndex, setSourceIndex] = useState(0);
   const [failed, setFailed] = useState(false);
   const [webgl] = useState(hasWebGL);
-  // Bumps to remount both canvases at the default camera ("Reset view"),
-  // so nobody has to hunt for the organ with manual orbiting.
-  const [viewNonce, setViewNonce] = useState(0);
+  const [cameraView, setCameraView] = useState<CameraView>({
+    position: [...entry.camera.position],
+    source: "preset",
+    revision: 0,
+  });
 
   const hotspot = useMemo(
     () => resolveHotspot(entry, suggestion.subRegion ?? null),
@@ -360,10 +418,27 @@ export default function OrganCompare(props: OrganCompareProps) {
     if (sourceIndex < sources.length - 1) setSourceIndex(sourceIndex + 1);
     else setFailed(true);
   };
-  const meaning = getHighlightMeaning(entry.organId, hotspot.key);
+  const organSummary = getOrganSummary(entry.organId);
+  const hasVerifiedRegion = Boolean(suggestion.subRegion && entry.hotspots[suggestion.subRegion]);
+  const meaning = hasVerifiedRegion ? getHighlightMeaning(entry.organId, hotspot.key) : organSummary;
   const drivingLabs = matchDrivingLabs(labs, suggestion.evidence);
+  const regionLabel = hasVerifiedRegion ? hotspot.label : ORGAN_DISPLAY_NAMES[entry.organId];
+  const doctorQuestions = buildDoctorQuestions(regionLabel, drivingLabs);
+  const hasReportEvidence = !manual && suggestion.evidence.some((line) => line.trim().length > 0);
+  const hasMarker = canShowReportMarker(manual, suggestion.evidence, hasVerifiedRegion);
 
-  const canvasFigure = (affectedPanel: boolean, title: string, titleClass: string, borderClass: string) => (
+  const synchronizeView = (source: PanelId, position: [number, number, number]) => {
+    setCameraView((current) => {
+      const unchanged = current.position.every((value, index) => Math.abs(value - position[index]) < 0.0001);
+      if (unchanged && current.source === source) return current;
+      return { position, source, revision: current.revision + 1 };
+    });
+  };
+  const applyPreset = (position: [number, number, number]) => {
+    setCameraView((current) => ({ position, source: "preset", revision: current.revision + 1 }));
+  };
+
+  const canvasFigure = (panelId: PanelId, title: string, titleClass: string, borderClass: string) => (
     <figure className={`overflow-hidden rounded-2xl border bg-slate-50 ${borderClass}`}>
       <figcaption
         className={`border-b bg-white px-4 py-2 font-mono text-[11px] uppercase tracking-widest ${titleClass}`}
@@ -372,13 +447,16 @@ export default function OrganCompare(props: OrganCompareProps) {
       </figcaption>
       <div className="h-72">
         <CanvasErrorBoundary
-          key={`${url}-${affectedPanel ? "affected" : "healthy"}-${viewNonce}`}
+          key={`${url}-${panelId}`}
           onError={advanceSource}
         >
           <OrganCanvas
             url={url}
             camera={entry.camera}
-            affected={affectedPanel}
+            panelId={panelId}
+            view={cameraView}
+            onViewChange={synchronizeView}
+            affected={panelId === "guided" && hasMarker}
             hotspot={hotspot}
             lesionOpacity={lesionOpacity}
           />
@@ -410,69 +488,85 @@ export default function OrganCompare(props: OrganCompareProps) {
 
       <p className="sr-only">
         3D illustration of {ORGAN_DISPLAY_NAMES[entry.organId]} for education. Left panel is the healthy
-        reference; right panel highlights {hotspot.label}. The rose pin is an illustration floating just
-        above the surface — not tissue, not part of the body.
+        reference; right panel {hasMarker
+          ? `marks ${hotspot.label}`
+          : hasReportEvidence
+            ? "shows report-guided organ context without a region marker"
+            : "is a manual anatomy exploration"}.
+        {hasMarker ? " The rose marker is an illustration floating just above the surface — not tissue, not part of the body." : ""}
       </p>
-
-      <section
-        aria-label="Why this area is highlighted"
-        className="rounded-xl border border-rose-200 bg-rose-50/70 p-4"
-      >
-        <h4 className="flex items-center gap-2 text-sm font-semibold text-rose-950">
-          <MapPin className="h-4 w-4" aria-hidden="true" />
-          Why this area is highlighted
-        </h4>
-        <p className="mt-1 text-sm leading-6 text-rose-950">{meaning}</p>
-        {drivingLabs.length > 0 ? (
-          <ul className="mt-2 flex flex-wrap gap-2" aria-label="Abnormal results behind this illustration">
-            {drivingLabs.map((lab) => (
-              <li
-                key={lab.test}
-                className={`rounded-full border bg-white px-2.5 py-1 font-mono text-[11px] font-semibold ${
-                  lab.flag === "high" ? "border-rose-300 text-rose-700" : "border-amber-300 text-amber-800"
-                }`}
-              >
-                {lab.test}: {lab.value}
-                {lab.unit ? ` ${lab.unit}` : ""} · {lab.flag}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
 
       <p className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-600">
         <span>
           Both panels show the same {ORGAN_DISPLAY_NAMES[entry.organId]} mesh — left is the healthy
-          reference, right carries your highlighted area ({hotspot.label}).
+          reference, right is {hasReportEvidence ? "report-guided organ context" : "manual anatomy exploration"}.
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-full bg-rose-600" aria-hidden="true" />
-          Rose pin = illustration only, floats above the surface
-        </span>
+        {hasMarker ? (
+          <span className="flex items-center gap-1.5">
+            <span className="grid size-4 place-items-center rounded-full bg-rose-700 font-mono text-[9px] font-bold text-white" aria-hidden="true">1</span>
+            Marker 1 links to the explanation below; it is not tissue
+          </span>
+        ) : null}
         <span className="text-slate-500">Drag in any direction for 3D · scroll after dragging to zoom</span>
       </p>
       <div className="grid gap-4 md:grid-cols-2">
-        {canvasFigure(false, "Healthy reference", "text-slate-500 border-slate-200", "border-slate-200")}
-        {canvasFigure(true, `Illustrative affected area · ${hotspot.label}`, "text-rose-700 border-rose-200", "border-rose-200")}
+        {canvasFigure("reference", "Healthy reference", "text-slate-500 border-slate-200", "border-slate-200")}
+        {canvasFigure(
+          "guided",
+          hasMarker
+            ? `Report-guided highlight · 1 ${hotspot.label}`
+            : hasReportEvidence
+              ? "Report-guided organ context"
+              : "Anatomy exploration",
+          hasReportEvidence ? "text-rose-700 border-rose-200" : "text-teal-700 border-teal-200",
+          hasReportEvidence ? "border-rose-200" : "border-teal-200",
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-        <span className="text-sm font-medium text-teal-800">Mouse controlled only · no automatic rotation</span>
-        <label className="flex items-center gap-2 text-sm text-slate-600">
-          Highlight
-          <input
-            type="range"
-            min={0.15}
-            max={1}
-            step={0.05}
-            value={lesionOpacity}
-            onChange={(event) => setLesionOpacity(Number(event.target.value))}
-            aria-label="Highlight intensity"
-          />
-        </label>
+        <span className="text-sm font-medium text-teal-800">Views stay synchronized · no automatic rotation</span>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="3D camera views">
+          <button
+            type="button"
+            onClick={() => applyPreset([0, 0, 3.2])}
+            className="flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
+          >
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" /> Front
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset([0, 0, -3.2])}
+            className="flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden="true" /> Back
+          </button>
+          {hasMarker ? (
+            <button
+              type="button"
+              onClick={() => applyPreset([0, 0, 2.8])}
+              className="flex items-center gap-1 rounded-full border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50"
+            >
+              <Focus className="h-3.5 w-3.5" aria-hidden="true" /> Focus marker
+            </button>
+          ) : null}
+        </div>
+        {hasMarker ? (
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            Marker visibility
+            <input
+              type="range"
+              min={0.15}
+              max={1}
+              step={0.05}
+              value={lesionOpacity}
+              onChange={(event) => setLesionOpacity(Number(event.target.value))}
+              aria-label="Marker visibility"
+            />
+          </label>
+        ) : null}
         <button
           type="button"
-          onClick={() => setViewNonce((n) => n + 1)}
+          onClick={() => applyPreset([...entry.camera.position])}
           className="ml-auto flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600 hover:bg-slate-50"
           title="Put both panels back to the default camera — no need to hunt for the organ"
         >
@@ -481,19 +575,120 @@ export default function OrganCompare(props: OrganCompareProps) {
         </button>
       </div>
 
+      <section
+        aria-label={hasReportEvidence ? "Report-guided anatomy explanation" : "Anatomy exploration guide"}
+        className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+      >
+        <div className="grid lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="border-b border-slate-200 p-5 lg:border-b-0 lg:border-r">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-700">
+              Reference anatomy
+            </p>
+            <h4 className="mt-2 text-base font-semibold text-slate-900">What this structure normally does</h4>
+            <p className="mt-2 text-sm leading-6 text-slate-700">{organSummary}</p>
+
+            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50/60 p-4">
+              <h5 className="flex items-center gap-2 text-sm font-semibold text-rose-950">
+                {hasMarker ? (
+                  <span className="grid size-5 place-items-center rounded-full bg-rose-700 font-mono text-[10px] text-white">1</span>
+                ) : (
+                  <MapPin className="h-4 w-4" aria-hidden="true" />
+                )}
+                {hasMarker ? hotspot.label : hasReportEvidence ? "Organ-level context" : "Anatomy guide"}
+              </h5>
+              <p className="mt-2 text-sm leading-6 text-rose-950">{meaning}</p>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <h5 className="text-sm font-semibold text-slate-900">What this view cannot show</h5>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                {hasMarker
+                  ? "This is generic reference anatomy, not your scan. The marker links a report cue to a learning location; it does not show damage, severity, or a disease shape."
+                  : hasReportEvidence
+                    ? "This is generic reference anatomy, not your scan. The report evidence supports organ-level context only, so no specific region is marked and no damage, severity, or disease shape is shown."
+                    : "This is generic reference anatomy, not your scan. Manual exploration is not linked to your report and does not show damage, severity, or a disease shape."}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-5 p-5">
+            <div>
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                {hasReportEvidence ? "Report cues used by the explainer" : "Exploration status"}
+              </p>
+              {hasReportEvidence ? (
+                <ul className="mt-3 space-y-2">
+                  {suggestion.evidence.map((line) => (
+                    <li key={line} className="flex gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-5 text-slate-700">
+                      <Quote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-700" aria-hidden="true" />
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  You selected this organ for learning. No report evidence is attached, so no report-linked marker or conclusion is shown.
+                </p>
+              )}
+            </div>
+
+            {drivingLabs.length > 0 ? (
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <h5 className="text-sm font-semibold text-slate-900">Related structured results</h5>
+                  <a href="/dashboard/trends" className="text-xs font-semibold text-teal-700 hover:text-teal-800 hover:underline">
+                    Compare past reports
+                  </a>
+                </div>
+                <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="min-w-[34rem] w-full text-left text-sm">
+                    <thead className="bg-slate-50 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Test</th>
+                        <th className="px-3 py-2 font-medium">Result</th>
+                        <th className="px-3 py-2 font-medium">Printed range</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {drivingLabs.map((lab) => (
+                        <tr key={lab.test}>
+                          <td className="px-3 py-2 font-medium text-slate-800">{lab.test}</td>
+                          <td className={`px-3 py-2 font-mono text-xs font-semibold ${lab.flag === "high" ? "text-rose-700" : "text-amber-700"}`}>
+                            {lab.value}{lab.unit ? ` ${lab.unit}` : ""} · {lab.flag}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-xs text-slate-500">
+                            {lab.refMin !== undefined || lab.refMax !== undefined
+                              ? `${lab.refMin ?? "—"}–${lab.refMax ?? "—"}${lab.unit ? ` ${lab.unit}` : ""}`
+                              : "Not printed"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : hasReportEvidence ? (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+                No abnormal structured lab was safely matched to these report cues, so none is linked to this explanation.
+              </p>
+            ) : null}
+
+            <div>
+              <h5 className="text-sm font-semibold text-slate-900">Questions to take to your clinician</h5>
+              <ol className="mt-2 space-y-2 text-sm leading-5 text-slate-700">
+                {doctorQuestions.map((question, index) => (
+                  <li key={question} className="flex gap-2">
+                    <span className="grid size-5 shrink-0 place-items-center rounded-full bg-teal-50 font-mono text-[10px] font-bold text-teal-800">{index + 1}</span>
+                    <span>{question}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <CaptionBlock text={caption} allowTranslate={allowTranslate} />
-      {suggestion.evidence.length > 0 ? (
-        <ul className="flex flex-wrap gap-2">
-          {suggestion.evidence.map((line) => (
-            <li
-              key={line}
-              className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-600"
-            >
-              {line}
-            </li>
-          ))}
-        </ul>
-      ) : null}
       <OrganRedFlags organId={entry.organId} />
       <DisclaimerFooter entry={entry} />
     </div>

@@ -43,3 +43,12 @@ export function stableModelScale(size: { x: number; y: number; z: number }): num
   }
   return Math.min(3 / size.x, 1.75 / size.y, 1.75 / size.z);
 }
+
+/** A marker needs report evidence and an exact registered region. */
+export function canShowReportMarker(
+  manual: boolean,
+  evidence: string[],
+  hasVerifiedRegion: boolean,
+): boolean {
+  return !manual && hasVerifiedRegion && evidence.some((line) => line.trim().length > 0);
+}
