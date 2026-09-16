@@ -164,7 +164,11 @@ function OrganCanvas({
   const [booted, setBooted] = useState(false);
   const [interactive, setInteractive] = useState(false);
   return (
-    <div className="relative h-full" onPointerLeave={() => setInteractive(false)}>
+    <div
+      className="relative h-full cursor-grab active:cursor-grabbing"
+      onPointerDown={() => setInteractive(true)}
+      onPointerLeave={() => setInteractive(false)}
+    >
       <Canvas
         dpr={[1, 2]}
         frameloop="demand"
@@ -185,12 +189,12 @@ function OrganCanvas({
           />
         </Suspense>
         <OrbitControls
-          enabled={interactive}
           target={[0, 0, 0]}
           enablePan={false}
+          enableZoom={interactive}
           enableDamping={false}
-          minPolarAngle={Math.PI / 2}
-          maxPolarAngle={Math.PI / 2}
+          minPolarAngle={0.2}
+          maxPolarAngle={Math.PI - 0.2}
           rotateSpeed={0.65}
           zoomSpeed={0.7}
           minDistance={2.75}
@@ -204,21 +208,15 @@ function OrganCanvas({
           </Html>
         ) : null}
       </Canvas>
-      {!interactive && booted ? (
-        <button
-          type="button"
-          onClick={() => setInteractive(true)}
-          className="absolute inset-0 cursor-grab bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-teal-700"
-          aria-label={`Activate ${affected ? "affected" : "healthy"} 3D model controls`}
+      {booted ? (
+        <span
+          className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium shadow-sm ${
+            interactive
+              ? "bg-teal-800/90 text-white"
+              : "border border-slate-200 bg-white/90 text-slate-600"
+          }`}
         >
-          <span className="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
-            Click to explore
-          </span>
-        </button>
-      ) : null}
-      {interactive ? (
-        <span className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-teal-800/90 px-3 py-1 text-xs font-medium text-white shadow-sm">
-          Drag left/right · scroll to zoom
+          {interactive ? "3D controls active · scroll to zoom" : "Drag to rotate in 3D"}
         </span>
       ) : null}
     </div>
@@ -459,7 +457,7 @@ export default function OrganCompare(props: OrganCompareProps) {
           <span className="size-2.5 rounded-full bg-rose-600" aria-hidden="true" />
           Rose pin = illustration only, floats above the surface
         </span>
-        <span className="text-slate-500">Click a model to activate controls; ordinary page scrolling leaves it unchanged</span>
+        <span className="text-slate-500">Drag in any direction for 3D · scroll after dragging to zoom</span>
       </p>
       <div className="grid gap-4 md:grid-cols-2">
         {canvasFigure(false, "Healthy reference", "text-slate-500 border-slate-200", "border-slate-200")}
