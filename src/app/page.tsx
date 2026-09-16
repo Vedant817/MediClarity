@@ -164,9 +164,9 @@ export default function Home() {
           {featureGroups.map((group) => (
             <div key={group.kicker}>
               <div className="max-w-2xl"><p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-[#0b766e]">{group.kicker}</p><h3 className="mt-2 text-2xl font-semibold tracking-tight">{group.heading}</h3><p className="mt-2 text-sm leading-6 text-[#526864]">{group.blurb}</p></div>
-              <div className="mt-6 grid gap-px overflow-hidden rounded-2xl border border-[#102c2a]/15 bg-[#102c2a]/15 sm:grid-cols-2 lg:grid-cols-3">
+              <div className={`mt-6 grid gap-5 sm:grid-cols-2 ${group.features.length === 2 ? "lg:grid-cols-2" : "lg:grid-cols-3"}`}>
                 {group.features.map((feature) => (
-                  <article key={feature.title} className="flex flex-col bg-[#fffdf7] p-7">
+                  <article key={feature.title} className="flex flex-col rounded-2xl border border-[#102c2a]/15 bg-[#fffdf7] p-7 shadow-[4px_4px_0_rgba(16,44,42,0.06)]">
                     <div className="flex items-start justify-between gap-3">
                       <feature.icon className="size-6 shrink-0 text-[#0b766e]" aria-hidden="true" />
                       <span className={`rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider ${tierBadge[feature.tier].className}`}>{tierBadge[feature.tier].label}</span>
