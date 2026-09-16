@@ -11,6 +11,9 @@ export async function GET() {
   if (!(await getEntitlements(userId)).medications) return Response.json({ error: "Medication tools require Pro", upgradeUrl: "/pricing" }, { status: 402 });
   await connectDB();
   const medications = await Medication.find({ userId, status: "active" }).select({ name: 1 }).limit(10).lean<Array<{ _id: unknown; name: string }>>();
+  // Interactions are pairwise: with fewer than two active medicines there is
+  // nothing to compare, so skip the external label lookups entirely.
+  if (medications.length < 2) return Response.json({ signals: [], disclaimer: "Label text matching is not a complete interaction check. Do not start, stop, or change medication without a pharmacist or clinician." });
 
   const signals = (await Promise.all(medications.map(async (medication) => {
     const query = encodeURIComponent(`openfda.brand_name:"${medication.name.replaceAll('"', "")}"`);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Crown, Pill, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type MedicationReport = { _id: string; sourceLab: string | null; reportDate: string | null; createdAt: string };
 type Medication = { _id: string; name: string; dose?: string; frequency?: string; status: "active" | "stopped"; source: "ocr" | "manual"; report?: MedicationReport | null };
@@ -20,14 +21,22 @@ export default function MedicationsPage() {
   const [medications, setMedications] = useState<Medication[]>([]);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [paywalled, setPaywalled] = useState(false);
+  const [loadingMeds, setLoadingMeds] = useState(true);
+  const [loadingSignals, setLoadingSignals] = useState(true);
   const [form, setForm] = useState({ name: "", dose: "", frequency: "" });
 
+  // Medicines render first; the slower FDA interaction review streams in
+  // afterwards so the list never waits on it — and the empty message only
+  // appears after loading finishes, never as a flash.
   const refresh = useCallback(async () => {
-    const [medsResponse, signalsResponse] = await Promise.all([fetch("/api/meds"), fetch("/api/meds/interactions")]);
-    if (medsResponse.status === 402 || signalsResponse.status === 402) { setPaywalled(true); return; }
+    const medsResponse = await fetch("/api/meds");
+    if (medsResponse.status === 402) { setPaywalled(true); setLoadingMeds(false); setLoadingSignals(false); return; }
     setPaywalled(false);
     if (medsResponse.ok) setMedications((await medsResponse.json()).medications);
+    setLoadingMeds(false);
+    const signalsResponse = await fetch("/api/meds/interactions");
     if (signalsResponse.ok) setSignals((await signalsResponse.json()).signals);
+    setLoadingSignals(false);
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -64,11 +73,20 @@ export default function MedicationsPage() {
         <Button className="bg-teal-700 hover:bg-teal-800">Add medicine</Button>
       </form>
       )}
+      {loadingSignals && !paywalled && <p className="text-xs text-slate-500" aria-live="polite">Checking medicine combinations against FDA labels…</p>}
       {signals.length > 0 && <section className="border border-amber-300 bg-amber-50 p-5"><h2 className="flex items-center gap-2 font-semibold"><ShieldAlert className="h-5 w-5" /> Review with a pharmacist</h2>{signals.map((signal) => <p key={signal.medicines.join("|")} className="mt-2 text-sm text-amber-950">{signal.message}</p>)}</section>}
       {!paywalled && (
-      <section className="divide-y border border-slate-200 bg-white shadow-sm">
-        {medications.map((medication) => <article key={medication._id} className="flex items-center gap-4 p-5"><Pill className="h-5 w-5 text-teal-700" /><div className="flex-1"><h2 className="font-semibold">{medication.name}</h2><p className="text-sm text-slate-600">{[medication.dose, medication.frequency].filter(Boolean).join(" · ") || "Dose not recorded"} · {medication.source}</p>{medication.report ? <p className="mt-1 text-xs text-slate-500">From report · <Link href="/dashboard/reports" className="font-medium text-teal-700 hover:underline">{reportLabel(medication.report)}</Link></p> : medication.source === "ocr" ? <p className="mt-1 text-xs text-slate-500">From report · original report no longer available</p> : null}</div><Button variant="outline" onClick={() => toggleMedication(medication)}>{medication.status === "active" ? "Mark stopped" : "Mark active"}</Button></article>)}
-        {medications.length === 0 && <p className="p-8 text-center text-slate-500">No medicines recorded. Add one or upload a report that lists medicines.</p>}
+      <section className="divide-y border border-slate-200 bg-white shadow-sm" aria-busy={loadingMeds}>
+        {loadingMeds ? (
+          <div className="space-y-4 p-5" aria-label="Loading medicines">
+            {[0, 1, 2].map((index) => <div key={index} className="flex items-center gap-4"><Skeleton className="h-5 w-5 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-64" /></div><Skeleton className="h-9 w-28" /></div>)}
+          </div>
+        ) : (
+          <>
+            {medications.map((medication) => <article key={medication._id} className="flex items-center gap-4 p-5"><Pill className="h-5 w-5 text-teal-700" /><div className="flex-1"><h2 className="font-semibold">{medication.name}</h2><p className="text-sm text-slate-600">{[medication.dose, medication.frequency].filter(Boolean).join(" · ") || "Dose not recorded"} · {medication.source}</p>{medication.report ? <p className="mt-1 text-xs text-slate-500">From report · <Link href="/dashboard/reports" className="font-medium text-teal-700 hover:underline">{reportLabel(medication.report)}</Link></p> : medication.source === "ocr" ? <p className="mt-1 text-xs text-slate-500">From report · original report no longer available</p> : null}</div><Button variant="outline" onClick={() => toggleMedication(medication)}>{medication.status === "active" ? "Mark stopped" : "Mark active"}</Button></article>)}
+            {medications.length === 0 && <p className="p-8 text-center text-slate-500">No medicines recorded. Add one or upload a report that lists medicines.</p>}
+          </>
+        )}
       </section>
       )}
       <p className="text-xs text-slate-500">For information only. This is not a prescription or a complete interaction checker.</p>
