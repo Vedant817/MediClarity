@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Markdown from "@/components/Markdown";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toPlainExcerpt } from "@/lib/summary-excerpt";
+import { toCaptionExcerpt } from "@/lib/summary-excerpt";
 import { getOrganModel } from "@/lib/anatomy/registry";
 import { ORGAN_DISPLAY_NAMES, ORGAN_IDS, VISUALIZATION_COPY, type OrganId, type VisualizationSuggestion } from "@/lib/anatomy/types";
 
@@ -127,7 +127,7 @@ export default function ReportVisualize({ reportId, summary, labs = [] }: { repo
     );
   }
 
-  const caption = toPlainExcerpt(summary, 320) || "Key findings from this report, explained in simple language.";
+  const caption = toCaptionExcerpt(summary, 320) || "Key findings from this report, explained in simple language.";
   const abnormalLabs = labs.filter((lab) => lab.flag === "high" || lab.flag === "low");
   const manualSuggestion: VisualizationSuggestion | null = manualOrgan
     ? { organId: manualOrgan, subRegion: null, relatedTo: null, confidence: 0, evidence: [], laterality: "unknown" }

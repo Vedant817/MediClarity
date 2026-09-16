@@ -66,3 +66,26 @@ export function toPlainExcerpt(markdown: unknown, maxChars = 220): string {
   const lastSpace = cut.lastIndexOf(" ");
   return `${(lastSpace > maxChars * 0.5 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
+
+/**
+ * Caption excerpt for the 3D illustration header: the first meaningful
+ * section label plus its opening sentence, joined readably — never a
+ * run-on blob and never raw table syntax (separator rows like `|---|---|`
+ * previously leaked through toPlainExcerpt as dashes).
+ */
+export function toCaptionExcerpt(markdown: unknown, maxChars = 320): string {
+  const plain = stripMarkdownForSpeech(markdown);
+  const blocks = plain
+    .split(/\n+/)
+    .map((block) => block.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (blocks.length === 0) return "";
+  let caption = blocks[0];
+  if (blocks.length > 1 && blocks[0].length < 80 && !/[.!?]$/.test(blocks[0])) {
+    caption = `${blocks[0]} — ${blocks[1]}`;
+  }
+  if (caption.length <= maxChars) return caption;
+  const cut = caption.slice(0, maxChars);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > maxChars * 0.5 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}

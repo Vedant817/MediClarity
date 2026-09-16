@@ -6,7 +6,7 @@ import { Canvas, useFrame, useLoader } from "@react-three/fiber";
 import { Html, OrbitControls } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import { Activity, MapPin } from "lucide-react";
+import { Activity, MapPin, RotateCcw } from "lucide-react";
 import CaptionBlock from "./CaptionBlock";
 import OrganRedFlags from "./OrganRedFlags";
 import {
@@ -48,7 +48,19 @@ function hasWebGL(): boolean {
   }
 }
 
-function NormalizedModel({ url }: { url: string }) {
+function NormalizedModel({
+  url,
+  hotspot,
+  showMarker,
+  markerOpacity,
+  pulse,
+}: {
+  url: string;
+  hotspot: { label: string; position: [number, number, number] } | null;
+  showMarker: boolean;
+  markerOpacity: number;
+  pulse: boolean;
+}) {
   const gltf = useLoader(GLTFLoader, url, (loader) => {
     loader.setMeshoptDecoder(MeshoptDecoder);
   });
@@ -64,11 +76,25 @@ function NormalizedModel({ url }: { url: string }) {
     const center = new THREE.Vector3();
     box.getCenter(center);
     const maxDim = Math.max(size.x, size.y, size.z, 0.001);
-    return { offset: center.multiplyScalar(-1), scale: 2.2 / maxDim };
+    return { offset: center.multiplyScalar(-1), scale: 2.2 / maxDim, maxDim };
   }, [scene]);
+  // Marker lives INSIDE the normalized group so it tracks the mesh at any
+  // scale/center. Registry positions are mesh-local units; the radius is
+  // derived from the organ size so the pin renders at a constant 0.24
+  // normalized units on every organ.
+  const markerRadius = (transform.maxDim * 0.24) / 2.2;
   return (
     <group position={transform.offset} scale={transform.scale}>
       <primitive object={scene} />
+      {showMarker && hotspot ? (
+        <LesionMarker
+          position={hotspot.position}
+          label={hotspot.label}
+          opacity={markerOpacity}
+          pulse={pulse}
+          radius={markerRadius}
+        />
+      ) : null}
     </group>
   );
 }
@@ -78,12 +104,15 @@ function LesionMarker({
   label,
   opacity,
   pulse,
+  radius,
 }: {
   position: [number, number, number];
   label: string;
   opacity: number;
   /** Gentle glow pulse (organ "activity" cue, cf. Human-Organ3D). Off when the user disables motion. */
   pulse: boolean;
+  /** Mesh-local radius; caller derives it from organ size for uniform pins. */
+  radius: number;
 }) {
   const material = useRef<THREE.MeshStandardMaterial>(null);
   useFrame(({ clock }) => {
@@ -96,7 +125,7 @@ function LesionMarker({
   return (
     <group position={position}>
       <mesh>
-        <sphereGeometry args={[0.24, 24, 24]} />
+        <sphereGeometry args={[radius, 24, 24]} />
         <meshStandardMaterial
           ref={material}
           color="#e11d48"
@@ -157,15 +186,13 @@ function OrganCanvas({
       <directionalLight position={[2.5, 4, 3]} intensity={1.4} />
       <directionalLight position={[-3, -1, -2]} intensity={0.35} />
       <Suspense fallback={<CanvasLoader />}>
-        <NormalizedModel url={url} />
-        {affected ? (
-          <LesionMarker
-            position={hotspot.position}
-            label={hotspot.label}
-            opacity={lesionOpacity}
-            pulse={autoRotate}
-          />
-        ) : null}
+        <NormalizedModel
+          url={url}
+          hotspot={affected ? hotspot : null}
+          showMarker={affected}
+          markerOpacity={lesionOpacity}
+          pulse={autoRotate}
+        />
       </Suspense>
       <OrbitControls
         autoRotate={autoRotate}
@@ -299,10 +326,9 @@ export default function OrganCompare(props: OrganCompareProps) {
   const [sourceIndex, setSourceIndex] = useState(0);
   const [failed, setFailed] = useState(false);
   const [webgl] = useState(hasWebGL);
-  // One viewer, two modes. Two simultaneous WebGL canvases doubled GPU
-  // memory and GLB decoding and could leave one panel blank; a toggle
-  // also gives the single stage room to breathe.
-  const [mode, setMode] = useState<"affected" | "healthy">("affected");
+  // Bumps to remount both canvases at the default camera ("Reset view"),
+  // so nobody has to hunt for the organ with manual orbiting.
+  const [viewNonce, setViewNonce] = useState(0);
 
   const hotspot = useMemo(
     () => resolveHotspot(entry, suggestion.subRegion ?? null),
@@ -332,9 +358,33 @@ export default function OrganCompare(props: OrganCompareProps) {
     if (sourceIndex < sources.length - 1) setSourceIndex(sourceIndex + 1);
     else setFailed(true);
   };
-  const affected = mode === "affected";
   const meaning = getHighlightMeaning(entry.organId, hotspot.key);
   const drivingLabs = matchDrivingLabs(labs, suggestion.evidence);
+
+  const canvasFigure = (affectedPanel: boolean, title: string, titleClass: string, borderClass: string) => (
+    <figure className={`overflow-hidden rounded-2xl border bg-slate-50 ${borderClass}`}>
+      <figcaption
+        className={`border-b bg-white px-4 py-2 font-mono text-[11px] uppercase tracking-widest ${titleClass}`}
+      >
+        {title}
+      </figcaption>
+      <div className="h-72">
+        <CanvasErrorBoundary
+          key={`${url}-${affectedPanel ? "affected" : "healthy"}-${viewNonce}`}
+          onError={advanceSource}
+        >
+          <OrganCanvas
+            url={url}
+            camera={entry.camera}
+            autoRotate={autoRotate}
+            affected={affectedPanel}
+            hotspot={hotspot}
+            lesionOpacity={lesionOpacity}
+          />
+        </CanvasErrorBoundary>
+      </div>
+    </figure>
+  );
 
   return (
     <div className="space-y-4">
@@ -358,8 +408,9 @@ export default function OrganCompare(props: OrganCompareProps) {
       </div>
 
       <p className="sr-only">
-        3D illustration of {ORGAN_DISPLAY_NAMES[entry.organId]} for education: {hotspot.label} highlighted
-        in the affected view. Use the comparison control to switch between healthy and affected views.
+        3D illustration of {ORGAN_DISPLAY_NAMES[entry.organId]} for education. Left panel is the healthy
+        reference; right panel highlights {hotspot.label}. The rose pin is an illustration floating just
+        above the surface — not tissue, not part of the body.
       </p>
 
       <section
@@ -388,56 +439,21 @@ export default function OrganCompare(props: OrganCompareProps) {
         ) : null}
       </section>
 
-      <div
-        className="inline-flex gap-1 self-start rounded-full border border-slate-200 bg-white p-1"
-        role="group"
-        aria-label="Comparison view"
-      >
-        {(
-          [
-            { value: "affected", label: "Affected illustration" },
-            { value: "healthy", label: "Healthy reference" },
-          ] as const
-        ).map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setMode(option.value)}
-            aria-pressed={mode === option.value}
-            className={`rounded-full px-3 py-1 font-mono text-[11px] font-semibold ${
-              mode === option.value
-                ? option.value === "affected"
-                  ? "bg-rose-700 text-white"
-                  : "bg-teal-700 text-white"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
+      <p className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-600">
+        <span>
+          Both panels show the same {ORGAN_DISPLAY_NAMES[entry.organId]} mesh — left is the healthy
+          reference, right carries your highlighted area ({hotspot.label}).
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="size-2.5 rounded-full bg-rose-600" aria-hidden="true" />
+          Rose pin = illustration only, floats above the surface
+        </span>
+        <span className="text-slate-500">Drag to rotate · scroll to zoom</span>
+      </p>
+      <div className="grid gap-4 md:grid-cols-2">
+        {canvasFigure(false, "Healthy reference", "text-slate-500 border-slate-200", "border-slate-200")}
+        {canvasFigure(true, "Illustrative affected area", "text-rose-700 border-rose-200", "border-rose-200")}
       </div>
-
-      <figure className={`overflow-hidden rounded-2xl border bg-slate-50 ${affected ? "border-rose-200" : "border-slate-200"}`}>
-        <figcaption
-          className={`border-b bg-white px-4 py-2 font-mono text-[11px] uppercase tracking-widest ${
-            affected ? "border-rose-200 text-rose-700" : "border-slate-200 text-slate-500"
-          }`}
-        >
-          {affected ? "Illustrative affected area" : "Healthy reference"}
-        </figcaption>
-        <div className="h-80">
-          <CanvasErrorBoundary key={`${url}-${mode}`} onError={advanceSource}>
-            <OrganCanvas
-              url={url}
-              camera={entry.camera}
-              autoRotate={autoRotate}
-              affected={affected}
-              hotspot={hotspot}
-              lesionOpacity={lesionOpacity}
-            />
-          </CanvasErrorBoundary>
-        </div>
-      </figure>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
         <label className="flex items-center gap-2 text-sm text-slate-600">
@@ -461,6 +477,15 @@ export default function OrganCompare(props: OrganCompareProps) {
             aria-label="Highlight intensity"
           />
         </label>
+        <button
+          type="button"
+          onClick={() => setViewNonce((n) => n + 1)}
+          className="ml-auto flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600 hover:bg-slate-50"
+          title="Put both panels back to the default camera — no need to hunt for the organ"
+        >
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+          Reset view
+        </button>
       </div>
 
       <CaptionBlock text={caption} allowTranslate={allowTranslate} />

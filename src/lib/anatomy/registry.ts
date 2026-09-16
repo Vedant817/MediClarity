@@ -12,7 +12,9 @@ import type { OrganId, OrganModelEntry } from "./types.ts";
  *
  * meshStatus MUST mirror public/models/manifest.json (local <-> local,
  * gap/placeholder <-> pending). The viewer offers 3D only for "local".
- * Hotspot positions are approximate until tuned against the real meshes.
+ * Hotspot positions are snapped to the mesh front surface by
+ * scripts/tune-anatomy-hotspots.mjs (raycast from +z); the viewer renders
+ * the pin inside the normalized model group so it tracks the mesh.
  */
 const HRA = "https://cdn.humanatlas.io/digital-objects/ref-organ";
 const LOCAL = "/models";
@@ -58,9 +60,9 @@ export const MODEL_REGISTRY: Record<OrganId, OrganModelEntry> = {
     HRA_LICENSE,
     HRA_ATTRIBUTION,
     {
-      ventricle: { label: "Ventricle", position: [0, -0.3, 0.4] },
-      artery: { label: "Artery", position: [0.2, 0.5, 0.2] },
-      circulation: { label: "Circulation", position: [0, 0, 0.5] },
+      ventricle: { label: "Ventricle", position: [0.02, 0.41, 0.0] },
+      artery: { label: "Artery", position: [0.05, 0.49, 0.01] },
+      circulation: { label: "Circulation", position: [0.04, 0.46, 0.01] },
     },
     ["heart health", "blood pressure", "circulation health"],
   ),
@@ -71,8 +73,8 @@ export const MODEL_REGISTRY: Record<OrganId, OrganModelEntry> = {
     HRA_LICENSE,
     HRA_ATTRIBUTION,
     {
-      "lower-lobe": { label: "Lower lobe", position: [-0.4, -0.5, 0.1] },
-      bronchi: { label: "Bronchi", position: [0, 0.3, 0.2] },
+      "lower-lobe": { label: "Lower lobe", position: [-0.07, 0.4, 0.01] },
+      bronchi: { label: "Bronchi", position: [-0.01, 0.53, 0.01] },
     },
     ["lung health", "lung infection pattern", "breathing health", "cough"],
   ),
@@ -83,9 +85,9 @@ export const MODEL_REGISTRY: Record<OrganId, OrganModelEntry> = {
     HRA_LICENSE,
     HRA_ATTRIBUTION,
     {
-      cortex: { label: "Cortex", position: [0, 0.2, 0.3] },
-      nephron: { label: "Nephron region", position: [0, 0, 0.2] },
-      pelvis: { label: "Renal pelvis", position: [0, -0.2, 0.1] },
+      cortex: { label: "Cortex", position: [0.08, 0.28, -0.08] },
+      nephron: { label: "Nephron region", position: [0.08, 0.24, -0.05] },
+      pelvis: { label: "Renal pelvis", position: [0.08, 0.19, -0.05] },
     },
     ["kidney health", "kidney function"],
   ),
@@ -96,7 +98,7 @@ export const MODEL_REGISTRY: Record<OrganId, OrganModelEntry> = {
     HRA_LICENSE,
     HRA_ATTRIBUTION,
     {
-      "right-lobe": { label: "Right lobe", position: [0.4, 0, 0.2] },
+      "right-lobe": { label: "Right lobe", position: [0.06, 0.35, 0.0] },
     },
     ["liver health"],
   ),
@@ -124,7 +126,7 @@ export const MODEL_REGISTRY: Record<OrganId, OrganModelEntry> = {
     // NOTE: mesh covers the large intestine only; small-bowel illustration
     // needs a dedicated asset (tracked for a later task).
     {
-      "large-intestine": { label: "Large intestine", position: [0.4, 0, 0.1] },
+      "large-intestine": { label: "Large intestine", position: [0.07, 0.13, 0.06] },
     },
     ["intestinal health", "colon health"],
   ),
@@ -135,8 +137,8 @@ export const MODEL_REGISTRY: Record<OrganId, OrganModelEntry> = {
     HRA_LICENSE,
     HRA_ATTRIBUTION,
     {
-      body: { label: "Body", position: [0, 0, 0.2] },
-      islets: { label: "Islet region", position: [-0.2, 0, 0.2] },
+      body: { label: "Body", position: [0.03, 0.27, -0.02] },
+      islets: { label: "Islet region", position: [-0.02, 0.27, -0.03] },
     },
     ["blood sugar", "pancreas health"],
   ),
@@ -147,7 +149,7 @@ export const MODEL_REGISTRY: Record<OrganId, OrganModelEntry> = {
     HRA_LICENSE,
     HRA_ATTRIBUTION,
     {
-      cortex: { label: "Cortex", position: [0, 0.4, 0.3] },
+      cortex: { label: "Cortex", position: [-0.01, 0.83, 0.02] },
     },
     ["headache health", "vertigo"],
   ),
@@ -185,7 +187,7 @@ export const MODEL_REGISTRY: Record<OrganId, OrganModelEntry> = {
     HRA_LICENSE,
     HRA_ATTRIBUTION,
     {
-      wall: { label: "Wall", position: [0, 0, 0.3] },
+      wall: { label: "Wall", position: [-0.02, 0.0, 0.0] },
     },
     ["bladder health"],
   ),
@@ -196,7 +198,7 @@ export const MODEL_REGISTRY: Record<OrganId, OrganModelEntry> = {
     HRA_LICENSE,
     HRA_ATTRIBUTION,
     {
-      body: { label: "Body", position: [0, 0, 0.2] },
+      body: { label: "Body", position: [0.08, 0.34, -0.09] },
     },
     ["spleen health"],
   ),

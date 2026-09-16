@@ -45,20 +45,20 @@ export default function CaptionBlock({
   return (
     <div>
       {allowTranslate && (
-        <div className="mb-2 flex gap-1" role="group" aria-label="Caption language">
+        <div className="mb-2 flex gap-1.5" role="group" aria-label="Caption language">
           {(["en", "hi"] as const).map((option) => (
             <button
               key={option}
               type="button"
               onClick={() => (option === "hi" ? void showHindi() : setLang("en"))}
               aria-pressed={lang === option}
-              className={`rounded-full px-2.5 py-0.5 font-mono text-[11px] font-semibold ${
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 lang === option
                   ? "bg-teal-700 text-white"
                   : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
               }`}
             >
-              {option === "en" ? "English" : "हिंदी"}
+              {option === "en" ? "English" : "हिन्दी"}
             </button>
           ))}
         </div>

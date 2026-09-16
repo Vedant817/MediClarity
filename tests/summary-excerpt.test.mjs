@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { stripMarkdownForSpeech, toPlainExcerpt } from "../src/lib/summary-excerpt.ts";
+import { stripMarkdownForSpeech, toCaptionExcerpt, toPlainExcerpt } from "../src/lib/summary-excerpt.ts";
 
 test("strips bold, headings, lists and tables", () => {
   const out = toPlainExcerpt(
@@ -52,4 +52,24 @@ test("speech text drops table separators and pipes without truncating", () => {
   assert.ok(out.length > 50, "must keep full text, not an excerpt");
   assert.equal(stripMarkdownForSpeech(null), "");
   assert.equal(stripMarkdownForSpeech(42), "");
+});
+
+test("toCaptionExcerpt joins section label and opening sentence readably", () => {
+  const out = toCaptionExcerpt(
+    "1. What this report was for\nThis is a combined thyroid-function and diabetes screening panel.\n\n2. Main findings\n\n| Test | Result |\n|---|---|\n| TSH | 9.4 |",
+  );
+  assert.ok(!out.includes("|"), `leaked pipes: ${out}`);
+  assert.ok(!out.includes("---"), `leaked separator: ${out}`);
+  assert.ok(
+    out.startsWith("What this report was for — This is a combined"),
+    `unexpected caption: ${out}`,
+  );
+});
+
+test("toCaptionExcerpt truncates long captions at word boundaries", () => {
+  const out = toCaptionExcerpt(`Summary paragraph ${"with filler words ".repeat(60)}end.`, 60);
+  assert.ok(out.length <= 61, out);
+  assert.ok(out.endsWith("…"), out);
+  assert.equal(toCaptionExcerpt(""), "");
+  assert.equal(toCaptionExcerpt(null), "");
 });

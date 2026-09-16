@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { after } from "next/server";
 import Markdown from "@/components/Markdown";
 import { readPublicShare, writeAuditLog } from "@/lib/share";
-import { toPlainExcerpt } from "@/lib/summary-excerpt";
+import { toCaptionExcerpt } from "@/lib/summary-excerpt";
 import ShareVisualize from "@/components/anatomy/ShareVisualize";
 
 export default async function SharedReportPage({ params }: { params: Promise<{ token: string }> }) {
@@ -59,7 +59,7 @@ export default async function SharedReportPage({ params }: { params: Promise<{ t
 
         <ShareVisualize
           visualizations={data.visualizations}
-          caption={toPlainExcerpt(data.report.summary, 320) || "Key findings from this report, explained in simple language."}
+          caption={toCaptionExcerpt(data.report.summary, 320) || "Key findings from this report, explained in simple language."}
         />
 
         <section className="border border-slate-200 bg-white p-6 shadow-sm">
