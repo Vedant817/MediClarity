@@ -67,6 +67,7 @@ export interface PatientProfile {
 export interface TimelineEvent {
     id: string;
     date: string;
+    time?: string;
     title: string;
     description: string;
     status?: string;

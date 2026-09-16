@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CreditCard, Globe, Shield } from "lucide-react";
+import Link from "next/link";
+import { useClerk } from "@clerk/nextjs";
+import { CreditCard, Crown, Globe, LogOut, Shield } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { VOICE_LANGUAGES, type PreferenceLocale } from "@/config/voice-languages";
@@ -16,8 +18,21 @@ const defaults: Preferences = { locale: "en", regionProfile: "GLOBAL", dateForma
 export default function SettingsPage() {
   const [preferences, setPreferences] = useState<Preferences>(defaults);
   const [status, setStatus] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+  const [plan, setPlan] = useState<string | null>(null);
+  const [quota, setQuota] = useState<{ used: number; limit: number | null } | null>(null);
+  const { signOut } = useClerk();
 
   useEffect(() => { fetch("/api/settings").then((response) => response.ok ? response.json() : null).then((data) => { if (data?.preferences) setPreferences(data.preferences) }); }, []);
+  useEffect(() => {
+    fetch("/api/user-data")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data?.plan) setPlan(String(data.plan));
+        if (data?.reportQuota) setQuota(data.reportQuota);
+      })
+      .catch(() => null);
+  }, []);
 
   async function save() {
     setStatus("Saving…");
@@ -44,7 +59,23 @@ export default function SettingsPage() {
 
         <Card><CardHeader><CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5 text-teal-700" />Deployment and compliance boundary</CardTitle></CardHeader><CardContent className="space-y-3 text-sm leading-6 text-slate-600"><p>Profiles record customer requirements; they do not certify compliance. The current hosted product provides authenticated access, expiring shares, and access logs.</p><p>Data residency, DPDP/GDPR operating processes, a US HIPAA BAA, and private-VPC/on-prem deployment require separate infrastructure and contracts before they can be claimed.</p></CardContent></Card>
 
+        <Card><CardHeader><CardTitle className="flex items-center gap-2"><Crown className="h-5 w-5 text-teal-700" />Current plan</CardTitle></CardHeader><CardContent className="space-y-2 text-sm text-slate-600">
+          <p>You are on the <strong className="capitalize text-slate-900">{plan ?? "…"}</strong> plan{quota && quota.limit !== null ? <> · {quota.used} of {quota.limit} report uploads used this month</> : null}.</p>
+          {plan && plan !== "free" ? (
+            <p>Manage payment methods, invoices, and cancellation in Stripe’s customer portal, or compare plans.</p>
+          ) : (
+            <p>Free includes 3 report uploads a month. Pro and Lab unlock trends, sharing, medications, and triage.</p>
+          )}
+          <div className="flex flex-wrap gap-3 pt-1"><Button asChild className="bg-teal-700 hover:bg-teal-800"><Link href="/pricing">Compare plans</Link></Button></div>
+        </CardContent></Card>
+
         <Card><CardHeader><CardTitle className="flex items-center gap-2"><CreditCard className="h-5 w-5 text-teal-700" />Billing</CardTitle></CardHeader><CardContent><p className="mb-4 text-sm text-slate-600">Manage payment methods, invoices, and subscription cancellation in Stripe’s customer portal.</p><Button variant="outline" onClick={manageBilling}>Manage billing</Button></CardContent></Card>
+
+        <Card className="border-rose-200"><CardHeader><CardTitle className="flex items-center gap-2 text-rose-700"><LogOut className="h-5 w-5" />Sign out</CardTitle></CardHeader><CardContent><p className="mb-4 text-sm text-slate-600">End this signed-in session on this device.</p><Button
+          onClick={() => { setSigningOut(true); void signOut({ redirectUrl: "/login" }); }}
+          disabled={signingOut}
+          className="bg-rose-600 font-semibold text-white hover:bg-rose-700"
+        ><LogOut className="mr-2 h-4 w-4" aria-hidden="true" />{signingOut ? "Signing out…" : "Log out"}</Button></CardContent></Card>
       </div>
     </main>
   );

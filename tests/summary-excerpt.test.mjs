@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { toPlainExcerpt } from "../src/lib/summary-excerpt.ts";
+import { stripMarkdownForSpeech, toPlainExcerpt } from "../src/lib/summary-excerpt.ts";
 
 test("strips bold, headings, lists and tables", () => {
   const out = toPlainExcerpt(
@@ -29,4 +29,27 @@ test("handles the real report style without asterisks", () => {
   );
   assert.ok(!out.includes("**"), out);
   assert.ok(out.includes("Singh, Karan"));
+});
+
+test("speech text drops table separators and pipes without truncating", () => {
+  const markdown = [
+    "## Main findings",
+    "",
+    "| Parameter | Result | Flag |",
+    "| --- | --- | --- |",
+    "| Hemoglobin | 10.8 g/dL | **low** |",
+    "",
+    "- anemia possible",
+    "<b>note</b>",
+  ].join("\n");
+  const out = stripMarkdownForSpeech(markdown);
+  assert.ok(!out.includes("---"), out);
+  assert.ok(!out.includes("|"), out);
+  assert.ok(!out.includes("**"), out);
+  assert.ok(!out.includes("<b>"), out);
+  assert.ok(out.includes("Hemoglobin, 10.8 g/dL, low"), out);
+  assert.ok(out.includes("Main findings"), out);
+  assert.ok(out.length > 50, "must keep full text, not an excerpt");
+  assert.equal(stripMarkdownForSpeech(null), "");
+  assert.equal(stripMarkdownForSpeech(42), "");
 });

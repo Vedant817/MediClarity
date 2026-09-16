@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
 import connectDB from "@/lib/db";
 import Medication from "@/models/medication";
+import Report from "@/models/report";
 import { getEntitlements } from "@/lib/entitlements";
 
 async function requireMedicationPlan(userId: string) {
@@ -20,7 +21,22 @@ export async function GET() {
   if (!(await requireMedicationPlan(userId))) return Response.json({ error: "Medication tools require Pro", upgradeUrl: "/pricing" }, { status: 402 });
   await connectDB();
   const medications = await Medication.find({ userId }).sort({ status: 1, createdAt: -1 }).lean();
-  return Response.json({ medications });
+  const reportIds = [...new Set(medications.map((medication) => String(medication.reportId ?? "")).filter(Boolean))];
+  const reports = reportIds.length > 0
+    ? await Report.find({ _id: { $in: reportIds }, userId }).select("_id sourceLab reportDate createdAt").lean()
+    : [];
+  const reportById = new Map(reports.map((report) => [String(report._id), {
+    _id: String(report._id),
+    sourceLab: report.sourceLab ?? null,
+    reportDate: report.reportDate ? new Date(report.reportDate).toISOString() : null,
+    createdAt: new Date(report.createdAt).toISOString(),
+  }]));
+  return Response.json({
+    medications: medications.map((medication) => ({
+      ...medication,
+      report: medication.reportId ? (reportById.get(String(medication.reportId)) ?? null) : null,
+    })),
+  });
 }
 
 export async function POST(request: Request) {

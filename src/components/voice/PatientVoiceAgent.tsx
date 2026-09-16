@@ -106,6 +106,10 @@ export default function PatientVoiceAgent() {
   const [noiseMode, setNoiseMode] = useState<"standard" | "noisy">("standard");
   const [browserSpeaking, setBrowserSpeaking] = useState(false);
   const [deviceVoiceAvailable, setDeviceVoiceAvailable] = useState<boolean | null>(null);
+  // Per-language device-voice availability (null = voices not loaded yet).
+  // Languages without a device voice still work for transcript + typed input;
+  // only spoken replies need an installed voice.
+  const [voiceSupport, setVoiceSupport] = useState<Record<string, boolean> | null>(null);
   const [text, setText] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [reconnectNotice, setReconnectNotice] = useState(false);
@@ -207,20 +211,25 @@ export default function PatientVoiceAgent() {
   useEffect(() => {
     if (!("speechSynthesis" in window)) {
       setDeviceVoiceAvailable(false);
+      setVoiceSupport(Object.fromEntries(VOICE_LANGUAGES.map((language) => [language.locale, false])));
       return;
     }
     const updateAvailability = () => {
-      const locale = selectedLocale.toLowerCase();
-      const language = locale.split("-")[0];
-      const voices = window.speechSynthesis.getVoices();
+      const voices = window.speechSynthesis.getVoices().map((voice) => voice.lang.toLowerCase());
       if (!voices.length) {
         setDeviceVoiceAvailable(null);
+        setVoiceSupport(null);
         return;
       }
-      setDeviceVoiceAvailable(voices.some((voice) => {
-        const voiceLocale = voice.lang.toLowerCase();
-        return voiceLocale === locale || voiceLocale.split("-")[0] === language;
-      }));
+      const support = Object.fromEntries(
+        VOICE_LANGUAGES.map((language) => {
+          const locale = language.locale.toLowerCase();
+          const base = locale.split("-")[0];
+          return [language.locale, voices.some((voice) => voice === locale || voice.split("-")[0] === base)];
+        }),
+      );
+      setVoiceSupport(support);
+      setDeviceVoiceAvailable(support[selectedLocale] ?? false);
     };
     updateAvailability();
     window.speechSynthesis.addEventListener("voiceschanged", updateAvailability);
@@ -340,6 +349,11 @@ export default function PatientVoiceAgent() {
               <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
                 <Languages className="h-4 w-4 text-teal-700" aria-hidden="true" />
                 Spoken language
+                <span
+                  className={`h-2 w-2 rounded-full ${deviceVoiceAvailable === null ? "bg-slate-300" : deviceVoiceAvailable ? "bg-emerald-500" : "bg-rose-500"}`}
+                  title={deviceVoiceAvailable === null ? "Checking installed device voices…" : deviceVoiceAvailable ? "A device voice is installed for this language" : "No device voice installed — transcript still works"}
+                  aria-hidden="true"
+                />
                 <select
                   value={selectedLocale}
                   onChange={(event) => {
@@ -351,7 +365,9 @@ export default function PatientVoiceAgent() {
                   className="rounded-lg border border-teal-200 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-teal-300 disabled:opacity-60"
                 >
                   {VOICE_LANGUAGES.map((language) => (
-                    <option key={language.locale} value={language.locale}>{language.label} · {language.nativeLabel}</option>
+                    <option key={language.locale} value={language.locale}>
+                      {language.label} · {language.nativeLabel}{voiceSupport && !voiceSupport[language.locale] ? " · no device voice" : ""}
+                    </option>
                   ))}
                 </select>
               </label>

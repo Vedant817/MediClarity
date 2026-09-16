@@ -101,3 +101,19 @@ npx wrangler deploy --dry-run
 ```
 
 For local end-to-end use, run Next.js at `NEXT_ORIGIN`, configure matching capability/service secrets in both processes, then run `npm run dev`. A Cloudflare account with Workers AI access is required to exercise Whisper, Llama, WebSockets, and Durable Object persistence. No external speech API key is required. Usage remains free only while the account stays within Cloudflare's current Workers and Workers AI free allocations; requests fail after a free limit is exhausted.
+
+### Local AI binding limitation
+
+`wrangler dev` runs the Worker locally in workerd, but the Workers AI binding (`env.AI`) is **not available locally** — calls fail with `Binding AI needs to be run remotely`. This affects both Whisper transcription and Llama responses, so a local-only worker can mint sessions and serve `/health` but cannot hold a voice conversation.
+
+To exercise the full voice path, run `npm run dev:remote` instead:
+
+```sh
+npm run dev:remote
+```
+
+Remote dev proxies binding calls to your Cloudflare account (code still runs locally), so:
+
+- You must be logged in (`npx wrangler whoami`) with Workers AI enabled.
+- The worker calls `NEXT_ORIGIN` **from the Cloudflare edge**, so the Next.js app must be reachable from the public internet — point `NEXT_ORIGIN`/`ALLOWED_ORIGIN` at a tunnel (e.g. `cloudflared tunnel --url http://localhost:3000`) or a deployed preview, not `http://localhost:3000`.
+- AI usage is billed to the account; keep test calls short.

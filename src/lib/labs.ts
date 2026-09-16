@@ -73,6 +73,54 @@ const aliasMap = new Map(
   definitions.flatMap((definition) => definition.aliases.map((alias) => [alias, definition] as const)),
 );
 
+const labVocabulary: string[] = definitions.flatMap((definition) => [
+  definition.canonicalName.toLowerCase(),
+  ...definition.aliases,
+]);
+
+/**
+ * Whether free text names a known lab analyte (canonical name or alias).
+ * Short tokens match whole words only so "hb" does not fire inside "cub".
+ * Used to tell lab-value questions ("do I have low hemoglobin") apart
+ * from condition questions ("do I have anemia").
+ */
+export function mentionsKnownLab(text: string): boolean {
+  const lower = text.toLowerCase();
+  const tokens = new Set(lower.split(/[^a-z0-9]+/).filter(Boolean));
+  return labVocabulary.some((term) =>
+    term.length > 3 ? lower.includes(term) : tokens.has(term),
+  );
+}
+
+const labTermsSortedDesc: string[] = (() => {
+  const terms = new Set<string>();
+  for (const definition of definitions) {
+    terms.add(definition.canonicalName.toLowerCase());
+    for (const alias of definition.aliases) terms.add(alias);
+  }
+  return [...terms].sort((a, b) => b.length - a.length);
+})();
+
+/**
+ * Remove known lab-analyte phrases from free text (longest first), so what
+ * remains reveals whether the user is also naming something else — e.g. a
+ * condition smuggled next to a lab ("anemia and low hemoglobin").
+ */
+export function removeKnownLabTerms(text: string): string {
+  let remaining = ` ${text.toLowerCase()} `;
+  for (const term of labTermsSortedDesc) {
+    if (term.length > 3) {
+      remaining = remaining.split(term).join(" ");
+    } else {
+      // Short aliases match whole words only ("tg" must not eat "stage").
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const pattern = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "g");
+      remaining = remaining.replace(pattern, "$1 $2");
+    }
+  }
+  return remaining;
+}
+
 function normalizedName(value: string) {
   return value.toLowerCase().replace(/[._]/g, " ").replace(/\s+/g, " ").trim();
 }

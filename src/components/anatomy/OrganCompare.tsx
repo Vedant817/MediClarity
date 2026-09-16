@@ -123,12 +123,17 @@ function OrganCanvas({
   hotspot: { label: string; position: [number, number, number] };
   lesionOpacity: number;
 }) {
+  // onCreated fires once R3F measures the container and boots the WebGL
+  // root. Until then the panel would be an empty black box (e.g. slow
+  // layout, backgrounded tab), so keep an explicit loading veil on top.
+  const [booted, setBooted] = useState(false);
   return (
     <Canvas
       dpr={[1, 2]}
       camera={{ position: camera.position, fov: camera.fov }}
       gl={{ antialias: true, alpha: true }}
       style={{ background: "transparent" }}
+      onCreated={() => setBooted(true)}
     >
       <ambientLight intensity={0.9} />
       <directionalLight position={[2.5, 4, 3]} intensity={1.4} />
@@ -146,6 +151,13 @@ function OrganCanvas({
         minDistance={1.6}
         maxDistance={9}
       />
+      {!booted ? (
+        <Html center zIndexRange={[50, 0]}>
+          <span className="animate-pulse rounded-full bg-white/90 px-3 py-1 font-mono text-[11px] text-slate-500 shadow-sm">
+            Preparing 3D view…
+          </span>
+        </Html>
+      ) : null}
     </Canvas>
   );
 }

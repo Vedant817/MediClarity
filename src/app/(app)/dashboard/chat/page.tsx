@@ -8,7 +8,7 @@ import { Send, LoaderCircle } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import clsx from "clsx";
 import { useUser } from "@clerk/nextjs";
-import Markdown from "react-markdown";
+import Markdown from "@/components/Markdown";
 
 type Message = {
     role: "user" | "assistant";

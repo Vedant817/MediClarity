@@ -1,4 +1,45 @@
 /**
+ * Turn markdown into speakable plain text for read-aloud. Unlike the list
+ * excerpt above, nothing is truncated — but every syntax artifact a speech
+ * engine would read literally (table separator rows like `|---|---|` become
+ * "dash dash dash") is removed, and table rows become plain sentences.
+ */
+export function stripMarkdownForSpeech(markdown: unknown): string {
+  if (typeof markdown !== "string") return "";
+  return markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")
+    .replace(/(^|[\s(])[*_]([^*_]+)[*_](?=[\s).,;:!?]|$)/g, "$1$2")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/^\s*>\s?/gm, "")
+    .split("\n")
+    .map((line) => {
+      // Table separator row (| --- | --- |) carries no content: drop it.
+      if (/^[\s|:\-]+$/.test(line)) return "";
+      // Table data row: pipes become pauses, not spoken words.
+      if (line.includes("|")) {
+        return line
+          .split("|")
+          .map((cell) => cell.trim())
+          .filter(Boolean)
+          .join(", ");
+      }
+      return line;
+    })
+    .join("\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[#*_~]/g, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
  * Turn a markdown report summary into a clean one-line-friendly excerpt for
  * list views (dashboard, profile). Full markdown rendering belongs on the
  * dedicated report view; lists must never leak `**`, `#`, `|` or `🔹`.

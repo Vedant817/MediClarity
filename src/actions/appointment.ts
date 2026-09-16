@@ -7,7 +7,7 @@ import Appointment from '@/models/appointment';
 import { isCanonicalAppointmentDate, isCanonicalAppointmentTime, normalizeAppointmentTime } from '@/lib/appointment-slot';
 import { auth } from '@clerk/nextjs/server';
 import { getAvailability } from '@/lib/availability';
-import { canTransitionAppointmentStatus, PATIENT_SETTABLE_STATUSES } from '@/lib/appointments';
+import { PATIENT_SETTABLE_STATUSES } from '@/lib/appointments';
 import { appointmentTypeIds } from '@/lib/data';
 
 const appointmentSchema = z.object({
@@ -90,17 +90,23 @@ export async function updateAppointmentStatus(appointmentId: string, status: str
 
         await connectDB();
 
-        const appointment = await Appointment.findOne({ _id: appointmentId, patientId: userId });
+        // Atomic conditional update: only a currently-scheduled visit moves.
+        // Scoped validators run on the $set paths only, so legacy documents
+        // missing unrelated fields still transition cleanly. Concurrent
+        // double-submits resolve to a single winner; losers see no match.
+        const appointment = await Appointment.findOneAndUpdate(
+            { _id: appointmentId, patientId: userId, status: "scheduled" },
+            { $set: { status: parsed.data } },
+            { new: true },
+        );
         if (!appointment) {
-            return { error: 'Appointment not found' };
+            const exists = await Appointment.exists({ _id: appointmentId, patientId: userId });
+            return {
+                error: exists
+                    ? 'Only scheduled visits can be updated. This visit already has an outcome.'
+                    : 'Appointment not found',
+            };
         }
-
-        if (!canTransitionAppointmentStatus(appointment.status, parsed.data)) {
-            return { error: 'Only scheduled visits can be updated. This visit already has an outcome.' };
-        }
-
-        appointment.status = parsed.data;
-        await appointment.save();
 
         revalidatePath('/appointments');
         const labels: Record<string, string> = {

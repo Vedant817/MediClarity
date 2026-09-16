@@ -5,7 +5,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar, Stethoscope } from 'lucide-react';
+import { Calendar, Clock, Stethoscope } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useUser } from '@clerk/nextjs';
@@ -27,6 +27,7 @@ import { TimelineEvent } from '@/types';
 interface Appointment {
     _id: string;
     date: string;
+    time?: string;
     providerId: string;
     reason: string;
     status: string;
@@ -79,6 +80,7 @@ export default function HealthTimeline() {
         const formattedAppointments = fetchedAppointments.map((apt: Appointment) => ({
             id: apt._id,
             date: apt.date,
+            time: apt.time ?? "",
             title: `Appointment with ${formatProviderId(apt.providerId)}`,
             description: apt.reason,
             status: apt.status,
@@ -166,6 +168,12 @@ export default function HealthTimeline() {
                                                 day: 'numeric',
                                             })}
                                         </span>
+                                        {event.time ? (
+                                            <>
+                                                <Clock className="ml-3 h-4 w-4" aria-hidden="true" />
+                                                <span>{event.time}</span>
+                                            </>
+                                        ) : null}
                                     </div>
                                     <div className="flex items-center space-x-2 mt-2 text-sm text-gray-500">
                                         <Stethoscope className="h-4 w-4" />

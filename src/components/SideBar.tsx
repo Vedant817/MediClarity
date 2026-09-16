@@ -137,14 +137,14 @@ const SideBar = () => {
 
     return (
         <>
-        <aside className="hidden w-64 shrink-0 border-r bg-white md:block">
-            <div className="flex h-16 items-center border-b px-4">
+        <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r bg-white md:flex">
+            <div className="flex h-16 shrink-0 items-center border-b px-4">
                 <Link href="/" className="flex items-center gap-2">
                     <Brain className="h-6 w-6 text-teal-600" aria-hidden="true" />
                     <span className="text-xl font-bold">MediClarity</span>
                 </Link>
             </div>
-            <nav className="space-y-5 p-4">
+            <nav className="flex-1 space-y-5 overflow-y-auto p-4">
                 {groups.map((group) => <div key={group.label}>
                     <p className="mb-2 px-3 font-mono text-[10px] uppercase tracking-wider text-slate-500">{group.label}</p>
                     <div className="space-y-1">{group.links.map((link) => (

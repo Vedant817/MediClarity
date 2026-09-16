@@ -1,35 +1,29 @@
 "use client"
 import { useState, ChangeEvent, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Upload, File, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import Markdown from 'react-markdown'
-import ChatWithAI from "@/components/ChatWithAI";
-import TextToSpeechButton from "@/components/TextToSpeechButton";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-    SelectGroup,
-    SelectLabel,
-} from "@/components/ui/select"
+import dynamic from "next/dynamic";
+import Link from "next/link";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const languageOptions = [
-    { code: 'en', label: 'English' },
-    { code: 'hi', label: 'Hindi' },
-    { code: 'pa', label: 'Punjabi' },
-    { code: 'es', label: 'Spanish' },
-    { code: 'ar', label: 'Arabic' },
-    { code: 'pt', label: 'Portuguese' },
-    { code: 'fr', label: 'French' },
-];
+const UploadResults = dynamic(() => import("@/components/UploadResults"), {
+    ssr: false,
+    loading: () => (
+        <div className="space-y-2 p-4" aria-busy="true" aria-label="Loading results">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-10 w-full" />
+        </div>
+    ),
+});
 
 export default function UploadReportPage() {
+    const router = useRouter();
     const [file, setFile] = useState<File | null>(null);
     const [fileUrl, setFileUrl] = useState("");
     const [statusMessage, setStatusMessage] = useState('');
@@ -37,12 +31,12 @@ export default function UploadReportPage() {
     const [uploadStatus, setUploadStatus] = useState<string | null>(null);
     const [ocrResult, setOcrResult] = useState<string | null>(null);
     const [summary, setSummary] = useState<string | null>(null);
-    const [showChat, setShowChat] = useState(false);
     const [selectedLang, setSelectedLang] = useState('en');
     const [translatedSummary, setTranslatedSummary] = useState('');
     const [sourceLab, setSourceLab] = useState('');
     const [sourceCountry, setSourceCountry] = useState('');
     const [reportDate, setReportDate] = useState('');
+    const [quotaExhausted, setQuotaExhausted] = useState(false);
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) return;
@@ -53,7 +47,7 @@ export default function UploadReportPage() {
         setOcrResult(null);
         setSummary(null);
         setTranslatedSummary('');
-        setShowChat(false);
+        setQuotaExhausted(false);
     };
 
     const handleUpload = async () => {
@@ -64,9 +58,11 @@ export default function UploadReportPage() {
             return;
         }
 
+        let limitHit = false;
         try {
             setUploading(true);
             setUploadStatus(null);
+            setQuotaExhausted(false);
 
             const formData = new FormData();
             formData.append("file", file);
@@ -82,7 +78,12 @@ export default function UploadReportPage() {
 
             if (!response.ok) {
                 const failure = await response.json().catch(() => ({}));
-                throw new Error(response.status === 402 ? "Free plan limit reached. Compare plans to upload another report." : failure.error || "Report processing failed");
+                if (response.status === 402) {
+                    setQuotaExhausted(true);
+                    limitHit = true;
+                    throw new Error("Free plan limit reached.");
+                }
+                throw new Error(failure.error || "Report processing failed");
             }
 
             const data = await response.json();
@@ -101,9 +102,20 @@ export default function UploadReportPage() {
             console.error("Error uploading file:", error);
             setUploadStatus("error");
 
-            toast.error("Upload failed", {
-                description: error instanceof Error ? error.message : "There was an error uploading your report. Please try again.",
-            });
+            if (limitHit) {
+                toast.error("Free plan limit reached.", {
+                    description: "Upgrade to keep uploading reports.",
+                    action: {
+                        label: "Upgrade plan",
+                        onClick: () => router.push("/pricing"),
+                    },
+                    duration: 8000,
+                });
+            } else {
+                toast.error("Upload failed", {
+                    description: error instanceof Error ? error.message : "There was an error uploading your report. Please try again.",
+                });
+            }
         } finally {
             setStatusMessage("");
             setUploading(false);
@@ -190,6 +202,14 @@ export default function UploadReportPage() {
                                 <p className="text-xs text-teal-900">{statusMessage}</p>
                             </div>
                         )}
+                        {quotaExhausted && (
+                            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-950" role="alert">
+                                <span><strong>You have used all free report uploads</strong> for this month. Upgrade to keep uploading.</span>
+                                <Button asChild className="bg-rose-600 font-semibold text-white hover:bg-rose-700">
+                                    <Link href="/pricing">Upgrade plan</Link>
+                                </Button>
+                            </div>
+                        )}
                         {fileUrl && (
                             <div className="space-y-2 rounded-md bg-green-50 p-3">
                                 <p className="text-sm font-medium text-green-800">Upload successful!</p>
@@ -206,49 +226,13 @@ export default function UploadReportPage() {
                         </Button>
                     </CardFooter>
                     {summary && (
-                        <div className="space-y-4 p-4">
-                            <div className="space-y-2 rounded-md bg-yellow-50 p-3">
-                                <p className="text-sm font-medium text-yellow-800">Summary:</p>
-                                <pre className="whitespace-pre-wrap text-xs text-yellow-700">
-                                    <Markdown>{translatedSummary || summary}</Markdown>
-                                </pre>
-                            </div>
-                            {!showChat && (
-                                <div className="flex gap-2 w-full">
-                                    <Button
-                                        onClick={() => setShowChat(true)}
-                                        className="w-[50%] bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
-                                    >
-                                        Have a chat with report
-                                    </Button>
-                                    <div className="w-full">
-                                        <TextToSpeechButton text={translatedSummary || summary} lang={selectedLang} />
-                                    </div>
-                                    <div className="flex w-full items-center gap-2">
-                                        <Select value={selectedLang} onValueChange={handleLanguageChange} >
-                                            <SelectTrigger className="w-full" aria-label="Summary language">
-                                                <SelectValue placeholder="Select a language" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectGroup className="w-full items-center justify-center">
-                                                    <SelectLabel>Languages</SelectLabel>
-                                                    {languageOptions.map((lang) => (
-                                                        <SelectItem key={lang.code} value={lang.code}>
-                                                            {lang.label}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectGroup>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    {showChat && summary && ocrResult && (
-                        <div className="p-4">
-                            <ChatWithAI summary={summary} ocr={ocrResult} />
-                        </div>
+                        <UploadResults
+                            summary={summary}
+                            translatedSummary={translatedSummary}
+                            selectedLang={selectedLang}
+                            onLanguageChange={(value) => void handleLanguageChange(value)}
+                            ocrResult={ocrResult}
+                        />
                     )}
                 </Card>
             </div>

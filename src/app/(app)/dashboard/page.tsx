@@ -115,10 +115,17 @@ export default function DashboardPage() {
 
       <main className="space-y-6 p-6">
         {data?.plan === "free" && data.reportQuota.limit !== null && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-l-4 border-orange-500 bg-orange-50 px-4 py-3 text-sm text-orange-950">
-            <span><strong>{data.reportQuota.used}/{data.reportQuota.limit}</strong> free report uploads used this month.</span>
-            <Link className="font-semibold underline underline-offset-4" href="/pricing">Compare plans</Link>
-          </div>
+          data.reportQuota.used >= data.reportQuota.limit ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-950" role="alert">
+              <span><strong>You have used all {data.reportQuota.limit} free report uploads</strong> for this month. Upgrade to keep uploading.</span>
+              <Link className="rounded-md bg-rose-600 px-4 py-2 font-semibold text-white hover:bg-rose-700" href="/pricing">Upgrade plan</Link>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-l-4 border-teal-600 bg-teal-50 px-4 py-3 text-sm text-teal-950">
+              <span><strong>{data.reportQuota.used}/{data.reportQuota.limit}</strong> free report uploads used this month.</span>
+              <Link className="font-semibold underline underline-offset-4" href="/pricing">Compare plans</Link>
+            </div>
+          )
         )}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card>

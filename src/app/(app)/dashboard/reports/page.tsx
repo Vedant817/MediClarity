@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Braces, CalendarIcon, Copy, Download, FileText, Share2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import Markdown from 'react-markdown'
+import Markdown from "@/components/Markdown"
 import { toPlainExcerpt } from "@/lib/summary-excerpt"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -161,7 +161,7 @@ export default function ReportsPage() {
                 </div>
             </ScrollArea>
             <Dialog open={!!selectedReport} onOpenChange={(open) => { if (!open) { setSelectedReport(null); setDialogTab("summary") } }}>
-                <DialogContent className="w-[calc(100vw-2rem)] max-w-4xl">
+                <DialogContent className="w-[calc(100vw-2rem)] max-w-6xl sm:max-w-6xl">
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-bold mb-2">📝 Report Details</DialogTitle>
                     </DialogHeader>
@@ -183,7 +183,7 @@ export default function ReportsPage() {
                                     <TabsTrigger value="visual" className="cursor-pointer">3D Explain</TabsTrigger>
                                 </TabsList>
                                 <TabsContent value="summary">
-                                    <div className="max-h-[500px] overflow-y-auto prose prose-sm sm:prose-base text-gray-800">
+                                    <div className="max-h-[500px] overflow-y-auto text-sm leading-7 text-gray-800">
                                         <Markdown>{selectedReport.summary}</Markdown>
                                     </div>
                                     {selectedReport.education && selectedReport.education.length > 0 && <div className="mt-4 grid gap-2 md:grid-cols-3">{selectedReport.education.map((card) => <div key={card._id} className="border p-3"><p className="font-semibold">{card.title}</p><p className="mt-1 text-xs text-gray-600">{card.summary}</p></div>)}</div>}
