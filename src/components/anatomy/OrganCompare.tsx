@@ -91,7 +91,6 @@ function NormalizedModel({
         {showMarker && hotspot ? (
           <LesionMarker
             position={hotspot.position}
-            label={hotspot.label}
             opacity={markerOpacity}
             radius={markerRadius}
           />
@@ -103,12 +102,10 @@ function NormalizedModel({
 
 function LesionMarker({
   position,
-  label,
   opacity,
   radius,
 }: {
   position: [number, number, number];
-  label: string;
   opacity: number;
   /** Mesh-local radius; caller derives it from organ size for uniform pins. */
   radius: number;
@@ -126,11 +123,6 @@ function LesionMarker({
           depthWrite={false}
         />
       </mesh>
-      <Html center position={[0, radius * 1.8, 0]} distanceFactor={8} zIndexRange={[20, 0]}>
-        <span className="pointer-events-none whitespace-nowrap rounded-full border border-rose-200 bg-white/95 px-1.5 py-0.5 font-mono text-[8px] font-semibold leading-none text-rose-700 shadow-sm">
-          {label}
-        </span>
-      </Html>
     </group>
   );
 }
@@ -461,7 +453,7 @@ export default function OrganCompare(props: OrganCompareProps) {
       </p>
       <div className="grid gap-4 md:grid-cols-2">
         {canvasFigure(false, "Healthy reference", "text-slate-500 border-slate-200", "border-slate-200")}
-        {canvasFigure(true, "Illustrative affected area", "text-rose-700 border-rose-200", "border-rose-200")}
+        {canvasFigure(true, `Illustrative affected area · ${hotspot.label}`, "text-rose-700 border-rose-200", "border-rose-200")}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
