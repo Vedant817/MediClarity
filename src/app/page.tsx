@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Check, CircleDashed, FileJson2, FileText, FlaskConical, Globe2, LineChart, ScanLine, Share2, ShieldCheck } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarCheck, Check, CircleDashed, FileJson2, FileText, FlaskConical, Globe2, KeyRound, Languages, Layers, LineChart, MessageCircle, Mic, Pill, ScanLine, Share2, ShieldCheck, Stethoscope } from "lucide-react";
 import { BillingButton } from "@/components/BillingButton";
 import { Button } from "@/components/ui/button";
 import { getPlanDisplay } from "@/config/pricing-display";
@@ -16,6 +16,52 @@ const productLayers = [
   { title: "Compare across borders", description: "Map aliases, units, dates, and reference ranges so results from different labs can share a timeline.", icon: Globe2 },
   { title: "Share without an EHR", description: "Give family or a doctor a time-limited report view with an access trail—designed for messaging-first care.", icon: Share2 },
   { title: "Use the same pipeline by API", description: "Labs and clinics send a document and receive normalized rows plus standards-ready observations.", icon: FlaskConical },
+];
+
+type FeatureTier = "free" | "pro" | "lab";
+
+const tierBadge: Record<FeatureTier, { label: string; className: string }> = {
+  free: { label: "Included free", className: "border-[#0b766e]/40 text-[#0b766e]" },
+  pro: { label: "Pro", className: "border-[#102c2a]/40 bg-[#102c2a] text-[#f7f3e9]" },
+  lab: { label: "Lab plan", className: "border-[#0b766e] bg-[#0b766e] text-white" },
+};
+
+type Feature = { title: string; description: string; icon: typeof FileText; tier: FeatureTier };
+
+const featureGroups: { kicker: string; heading: string; blurb: string; features: Feature[] }[] = [
+  {
+    kicker: "Your record",
+    heading: "Reports become a record you can use.",
+    blurb: "Everything extracted stays linked to its source document, so you can always check where a number came from.",
+    features: [
+      { title: "Structured lab results", description: "Uploads become typed rows—test, value, unit, reference range, flag—mapped to standard LOINC codes.", icon: FileJson2, tier: "free" },
+      { title: "Lab trends", description: "Watch Hemoglobin or LDL across reports and labs, plotted against each test's own reference range.", icon: LineChart, tier: "pro" },
+      { title: "3D Explain", description: "See which organ your abnormal results point to in interactive 3D—healthy vs affected, red-flag signs, Hindi and simple-language options.", icon: Layers, tier: "pro" },
+      { title: "Record chat", description: "Ask questions answered only from your own reports and labs—with honest “not in your record” answers, never guesses.", icon: MessageCircle, tier: "free" },
+      { title: "Translation + read-aloud", description: "Patient-friendly summaries in 7 languages, with speech playback for low-literacy access.", icon: Languages, tier: "free" },
+    ],
+  },
+  {
+    kicker: "Care",
+    heading: "Guidance that points to a clinician.",
+    blurb: "Triage and education that explain what to do next—without ever pretending to diagnose.",
+    features: [
+      { title: "Voice assistant", description: "Talk through your record hands-free in 10 Indian languages, with a live transcript and typed fallback.", icon: Mic, tier: "free" },
+      { title: "Medications", description: "Medicines pulled from your reports plus your own entries, linked to their source report, with pharmacist-review flags on risky combinations.", icon: Pill, tier: "pro" },
+      { title: "Care direction", description: "Describe symptoms for urgency guidance—how soon to seek care, which specialist fits, and red flags that mean act now.", icon: Stethoscope, tier: "pro" },
+      { title: "Appointments", description: "Book real slots with available providers, get reminders, and record attended outcomes on your timeline.", icon: CalendarCheck, tier: "free" },
+      { title: "Learn", description: "Short, simple-language explainers generated from your own abnormal results.", icon: BookOpen, tier: "pro" },
+    ],
+  },
+  {
+    kicker: "Share & build",
+    heading: "Take the record to your doctor—or your product.",
+    blurb: "Messaging-first sharing for families, and the same structuring pipeline as an API for labs.",
+    features: [
+      { title: "Share without an EHR", description: "Expiring links a doctor can open incognito, shareable over WhatsApp—plus a printable doctor summary, FHIR export, and a full access trail.", icon: Share2, tier: "pro" },
+      { title: "Lab API + white-label", description: "Send a document, get normalized lab rows plus FHIR observations over one keyed endpoint. Brand the portal as your lab.", icon: KeyRound, tier: "lab" },
+    ],
+  },
 ];
 
 const plans = getPlanDisplay();
@@ -36,6 +82,7 @@ export default function Home() {
           </Link>
           <nav className="hidden items-center gap-7 text-sm md:flex" aria-label="Main navigation">
             <Link href="#product" className="hover:text-[#0b766e]">Product</Link>
+            <Link href="#features" className="hover:text-[#0b766e]">Features</Link>
             <Link href="#pricing" className="hover:text-[#0b766e]">Pricing</Link>
             <Link href="#boundaries" className="hover:text-[#0b766e]">Boundaries</Link>
           </nav>
@@ -62,6 +109,20 @@ export default function Home() {
               <Button size="lg" asChild className="bg-[#0b766e] text-white hover:bg-[#075e58]"><Link href="/signup">Start with 3 free reports <ArrowRight aria-hidden="true" /></Link></Button>
               <Button size="lg" variant="outline" asChild className="border-[#102c2a]/30 bg-transparent"><Link href="#product">See the data pipeline</Link></Button>
             </div>
+            <dl className="mt-8 flex flex-wrap gap-x-8 gap-y-3">
+              {[
+                ["9", "illustrated organs in 3D Explain"],
+                ["10", "voice-assistant languages"],
+                ["7", "summary translation languages"],
+                ["LOINC", "standard codes on lab rows"],
+              ].map(([value, label]) => (
+                <div key={label} className="flex items-baseline gap-2">
+                  <dt className="sr-only">{label}</dt>
+                  <dd className="text-2xl font-semibold tracking-tight text-[#102c2a]">{value}</dd>
+                  <dd className="max-w-28 text-xs leading-4 text-[#526864]">{label}</dd>
+                </div>
+              ))}
+            </dl>
             <div className="mt-7 flex max-w-xl items-start gap-3 border-l-2 border-[#0b766e] pl-4 text-sm leading-6 text-[#526864]">
               <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[#0b766e]" aria-hidden="true" />
               <p>For information only, not medical advice or diagnosis. Always discuss results and urgent symptoms with a qualified clinician.</p>
@@ -97,11 +158,34 @@ export default function Home() {
         </div>
       </section>
 
+      <section id="features" className="mx-auto max-w-7xl scroll-mt-20 px-5 py-20 lg:px-8">
+        <div className="max-w-2xl"><p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-[#0b766e]">Features</p><h2 className="mt-4 text-4xl font-semibold tracking-tight">Everything your reports can do once they are structured.</h2><p className="mt-4 leading-7 text-[#526864]">Badges show which plan each capability needs. Start free; upgrade when your record grows.</p></div>
+        <div className="mt-12 space-y-14">
+          {featureGroups.map((group) => (
+            <div key={group.kicker}>
+              <div className="max-w-2xl"><p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-[#0b766e]">{group.kicker}</p><h3 className="mt-2 text-2xl font-semibold tracking-tight">{group.heading}</h3><p className="mt-2 text-sm leading-6 text-[#526864]">{group.blurb}</p></div>
+              <div className="mt-6 grid gap-px overflow-hidden rounded-2xl border border-[#102c2a]/15 bg-[#102c2a]/15 sm:grid-cols-2 lg:grid-cols-3">
+                {group.features.map((feature) => (
+                  <article key={feature.title} className="flex flex-col bg-[#fffdf7] p-7">
+                    <div className="flex items-start justify-between gap-3">
+                      <feature.icon className="size-6 shrink-0 text-[#0b766e]" aria-hidden="true" />
+                      <span className={`rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider ${tierBadge[feature.tier].className}`}>{tierBadge[feature.tier].label}</span>
+                    </div>
+                    <h4 className="mt-6 text-lg font-semibold">{feature.title}</h4>
+                    <p className="mt-2 flex-1 text-sm leading-6 text-[#526864]">{feature.description}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="border-y border-[#102c2a]/15 bg-[#dcece7]">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 py-16 lg:grid-cols-3 lg:px-8">
-          <div><p className="font-mono text-xs uppercase tracking-widest text-[#0b766e]">Available foundation</p><h3 className="mt-3 text-2xl font-semibold">Upload, OCR, explain, translate, ask, revisit.</h3></div>
-          <div><p className="font-mono text-xs uppercase tracking-widest text-[#0b766e]">Built for provenance</p><h3 className="mt-3 text-2xl font-semibold">Results keep their report, date, unit, range, and source.</h3></div>
-          <div><p className="font-mono text-xs uppercase tracking-widest text-[#0b766e]">Deployment direction</p><h3 className="mt-3 text-2xl font-semibold">Hosted open-weight models now; private deployment path later.</h3></div>
+          <div><p className="font-mono text-xs uppercase tracking-widest text-[#0b766e]">Provenance over black boxes</p><h3 className="mt-3 text-2xl font-semibold">Every result links back to its source document.</h3><p className="mt-3 text-sm leading-6 text-[#36514e]">Summaries, lab rows, medications, and 3D explanations all carry their report, date, and range—so a doctor can verify, not just trust.</p></div>
+          <div><p className="font-mono text-xs uppercase tracking-widest text-[#0b766e]">Cross-lab, cross-border by design</p><h3 className="mt-3 text-2xl font-semibold">Aliases, units, and ranges normalized to LOINC-coded rows.</h3><p className="mt-3 text-sm leading-6 text-[#36514e]">Results from different labs and countries share one timeline, each plotted against its own source reference range.</p></div>
+          <div><p className="font-mono text-xs uppercase tracking-widest text-[#0b766e]">Messaging-first sharing</p><h3 className="mt-3 text-2xl font-semibold">Expiring links that work over WhatsApp—with an audit trail.</h3><p className="mt-3 text-sm leading-6 text-[#36514e]">No EHR login needed for family or a doctor. Open-weight models keep the pipeline portable toward private deployment.</p></div>
         </div>
       </section>
 
