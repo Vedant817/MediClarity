@@ -62,6 +62,9 @@ export async function GET() {
       metrics: {
         totalReports,
         totalAppointments: appointments.length,
+        activeAppointments: appointments.filter(
+          (appointment) => appointment.status === "scheduled",
+        ).length,
         upcomingAppointments: upcomingAppointments.length,
         completedAppointments: appointments.filter(
           (appointment) => appointment.status === "attended" || appointment.status === "completed",

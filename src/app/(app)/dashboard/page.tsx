@@ -36,7 +36,7 @@ type DashboardPayload = {
   upcomingAppointments: Appointment[];
   metrics: {
     totalReports: number;
-    totalAppointments: number;
+    activeAppointments: number;
     upcomingAppointments: number;
     completedAppointments: number;
   };
@@ -127,7 +127,7 @@ export default function DashboardPage() {
             </div>
           )
         )}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-gray-600">
@@ -142,22 +142,11 @@ export default function DashboardPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-gray-600">
-                Appointments
+                Active Appointments
               </CardTitle>
             </CardHeader>
             <CardContent className="text-2xl font-semibold">
-              {loading ? "--" : (data?.metrics.totalAppointments ?? 0)}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                Upcoming Visits
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-2xl font-semibold">
-              {loading ? "--" : (data?.metrics.upcomingAppointments ?? 0)}
+              {loading ? "--" : (data?.metrics.activeAppointments ?? 0)}
             </CardContent>
           </Card>
 
