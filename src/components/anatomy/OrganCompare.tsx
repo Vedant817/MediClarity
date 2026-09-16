@@ -352,7 +352,11 @@ export default function OrganCompare(props: OrganCompareProps) {
     );
   }
 
-  const sources = [entry.glb, entry.fallbackGlb];
+  // Local mirror first: same-origin (no CORS), instant, and private (no
+  // third-party request leaks which organ was viewed). The HRA CDN sends no
+  // Access-Control-Allow-Origin header, so browsers reject it — it stays
+  // only as a secondary fallback.
+  const sources = [entry.fallbackGlb, entry.glb];
   const url = sources[Math.min(sourceIndex, sources.length - 1)];
   const advanceSource = () => {
     if (sourceIndex < sources.length - 1) setSourceIndex(sourceIndex + 1);
