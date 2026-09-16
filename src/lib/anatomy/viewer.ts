@@ -24,29 +24,22 @@ export function resolveHotspot(entry: OrganModelEntry, subRegion: string | null)
 }
 
 /**
- * Uniform scale so a model of `size` fills `fill` (0-1) of the visible
- * viewport, fitting the tighter axis. Wide flat organs (pancreas) then
- * fill the width; tall ones (kidney) fill the height — no fixed
- * one-size scale that leaves oceans of empty canvas. Falls back to 1
- * when measurements are missing so the model never vanishes.
+ * Fit every organ into a stable world-space box. This deliberately does not
+ * depend on the mutable R3F viewport: dialog scrolling and control resets
+ * must never resize a loaded model. The box fits the fixed default camera on
+ * desktop and narrow/mobile panels while preserving useful scale for flat
+ * organs such as the pancreas.
  */
-export function fitModelScale(
-  size: { x: number; y: number },
-  viewport: { width: number; height: number },
-  fill = 0.85,
-): number {
+export function stableModelScale(size: { x: number; y: number; z: number }): number {
   if (
     !Number.isFinite(size.x) ||
     !Number.isFinite(size.y) ||
-    !Number.isFinite(viewport.width) ||
-    !Number.isFinite(viewport.height) ||
+    !Number.isFinite(size.z) ||
     size.x <= 0 ||
     size.y <= 0 ||
-    viewport.width <= 0 ||
-    viewport.height <= 0
+    size.z <= 0
   ) {
     return 1;
   }
-  const clampedFill = Math.min(Math.max(fill, 0.1), 1);
-  return Math.min((viewport.width * clampedFill) / size.x, (viewport.height * clampedFill) / size.y);
+  return Math.min(3 / size.x, 1.75 / size.y, 1.75 / size.z);
 }

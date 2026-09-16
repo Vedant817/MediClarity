@@ -2,7 +2,7 @@
 
 import { Component, Suspense, useMemo, useState, type ReactNode } from "react";
 import * as THREE from "three";
-import { Canvas, useLoader, useThree } from "@react-three/fiber";
+import { Canvas, useLoader } from "@react-three/fiber";
 import { Html, OrbitControls } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
@@ -16,7 +16,7 @@ import {
   type VisualizationSuggestion,
 } from "@/lib/anatomy/types";
 import { getHighlightMeaning, matchDrivingLabs, type DrivingLab } from "@/lib/anatomy/highlight-info";
-import { fitModelScale, resolveHotspot, shouldRenderMesh } from "@/lib/anatomy/viewer";
+import { resolveHotspot, shouldRenderMesh, stableModelScale } from "@/lib/anatomy/viewer";
 
 export type OrganCompareProps = {
   entry: OrganModelEntry;
@@ -67,22 +67,16 @@ function NormalizedModel({
   // canvas steal the mesh from the first and render an empty panel.
   // clone(true) shares geometry/material (cheap) with a distinct hierarchy.
   const scene = useMemo(() => gltf.scene.clone(true), [gltf]);
-  // Fit the organ to the visible viewport (tighter axis, 85% fill) instead
-  // of a fixed world size: flat organs fill the width, tall ones the
-  // height, and nobody has to hunt for the model. Recomputes on resize
-  // via the viewport subscription.
-  const viewport = useThree((s) => s.viewport);
+  // Stable world-space fitting avoids a resize feedback loop when the report
+  // dialog scrolls or Reset view remounts the canvas.
   const transform = useMemo(() => {
     const box = new THREE.Box3().setFromObject(scene);
     const size = new THREE.Vector3();
     box.getSize(size);
     const center = new THREE.Vector3();
     box.getCenter(center);
-    const maxDim = Math.max(size.x, size.y, size.z, 0.001);
-    const fit = fitModelScale(size, viewport, 0.85);
-    const scale = Number.isFinite(fit) && fit > 0 ? fit : 2.2 / maxDim;
-    return { offset: center.multiplyScalar(-1), scale };
-  }, [scene, viewport]);
+    return { offset: center.multiplyScalar(-1), scale: stableModelScale(size) };
+  }, [scene]);
   // Marker lives INSIDE the normalized group so it tracks the mesh at any
   // scale/center. Registry positions are mesh-local units; the radius is
   // derived from the fitted scale so the pin renders at a constant 0.24
@@ -168,45 +162,66 @@ function OrganCanvas({
   // root. Until then the panel would be an empty black box (e.g. slow
   // layout, backgrounded tab), so keep an explicit loading veil on top.
   const [booted, setBooted] = useState(false);
+  const [interactive, setInteractive] = useState(false);
   return (
-    <Canvas
-      dpr={[1, 2]}
-      frameloop="demand"
-      camera={{ position: camera.position, fov: camera.fov }}
-      gl={{ antialias: true, alpha: true }}
-      style={{ background: "transparent" }}
-      onCreated={() => setBooted(true)}
-    >
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[2.5, 4, 3]} intensity={1.4} />
-      <directionalLight position={[-3, -1, -2]} intensity={0.35} />
-      <Suspense fallback={<CanvasLoader />}>
-        <NormalizedModel
-          url={url}
-          hotspot={affected ? hotspot : null}
-          showMarker={affected}
-          markerOpacity={lesionOpacity}
+    <div className="relative h-full" onPointerLeave={() => setInteractive(false)}>
+      <Canvas
+        dpr={[1, 2]}
+        frameloop="demand"
+        camera={{ position: camera.position, fov: camera.fov }}
+        gl={{ antialias: true, alpha: true }}
+        style={{ background: "transparent" }}
+        onCreated={() => setBooted(true)}
+      >
+        <ambientLight intensity={0.9} />
+        <directionalLight position={[2.5, 4, 3]} intensity={1.4} />
+        <directionalLight position={[-3, -1, -2]} intensity={0.35} />
+        <Suspense fallback={<CanvasLoader />}>
+          <NormalizedModel
+            url={url}
+            hotspot={affected ? hotspot : null}
+            showMarker={affected}
+            markerOpacity={lesionOpacity}
+          />
+        </Suspense>
+        <OrbitControls
+          enabled={interactive}
+          target={[0, 0, 0]}
+          enablePan={false}
+          enableDamping={false}
+          minPolarAngle={Math.PI / 2}
+          maxPolarAngle={Math.PI / 2}
+          rotateSpeed={0.65}
+          zoomSpeed={0.7}
+          minDistance={2.75}
+          maxDistance={4.5}
         />
-      </Suspense>
-      <OrbitControls
-        target={[0, 0, 0]}
-        enablePan={false}
-        enableDamping={false}
-        minPolarAngle={Math.PI / 2}
-        maxPolarAngle={Math.PI / 2}
-        rotateSpeed={0.65}
-        zoomSpeed={0.7}
-        minDistance={2.75}
-        maxDistance={4.5}
-      />
-      {!booted ? (
-        <Html center zIndexRange={[50, 0]}>
-          <span className="animate-pulse rounded-full bg-white/90 px-3 py-1 font-mono text-[11px] text-slate-500 shadow-sm">
-            Preparing 3D view…
+        {!booted ? (
+          <Html center zIndexRange={[50, 0]}>
+            <span className="animate-pulse rounded-full bg-white/90 px-3 py-1 font-mono text-[11px] text-slate-500 shadow-sm">
+              Preparing 3D view…
+            </span>
+          </Html>
+        ) : null}
+      </Canvas>
+      {!interactive && booted ? (
+        <button
+          type="button"
+          onClick={() => setInteractive(true)}
+          className="absolute inset-0 cursor-grab bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-teal-700"
+          aria-label={`Activate ${affected ? "affected" : "healthy"} 3D model controls`}
+        >
+          <span className="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
+            Click to explore
           </span>
-        </Html>
+        </button>
       ) : null}
-    </Canvas>
+      {interactive ? (
+        <span className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-teal-800/90 px-3 py-1 text-xs font-medium text-white shadow-sm">
+          Drag left/right · scroll to zoom
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -444,7 +459,7 @@ export default function OrganCompare(props: OrganCompareProps) {
           <span className="size-2.5 rounded-full bg-rose-600" aria-hidden="true" />
           Rose pin = illustration only, floats above the surface
         </span>
-        <span className="text-slate-500">Drag left or right to rotate · scroll to zoom</span>
+        <span className="text-slate-500">Click a model to activate controls; ordinary page scrolling leaves it unchanged</span>
       </p>
       <div className="grid gap-4 md:grid-cols-2">
         {canvasFigure(false, "Healthy reference", "text-slate-500 border-slate-200", "border-slate-200")}
