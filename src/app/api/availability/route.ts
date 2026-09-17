@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isCanonicalAppointmentDate } from "@/lib/appointment-slot";
 import { getAvailability } from "@/lib/availability";
 import { auth } from "@clerk/nextjs/server";
+import Appointment from "@/models/appointment";
 
 export async function GET(req: Request) {
     try {
@@ -25,7 +26,13 @@ export async function GET(req: Request) {
         const availableTimes = availability[date].timeSlots
             .filter((slot) => slot.available)
             .map((slot) => slot.time);
-        return NextResponse.json({ availableTimes, availability });
+        const ownedScheduledTimes = await Appointment.find({
+            patientId: userId,
+            providerId,
+            date,
+            status: 'scheduled',
+        }).distinct('time');
+        return NextResponse.json({ availableTimes, ownedScheduledTimes, availability });
 
     } catch (error) {
         console.error("Failed to fetch availability:", error);

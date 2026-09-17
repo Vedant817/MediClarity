@@ -6,13 +6,29 @@ import Provider from "@/models/provider";
 import Conversation, { IMessage } from "@/models/conversation";
 import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { auth } from "@clerk/nextjs/server";
+import { z } from "zod";
 import { getLLM, invokeWithRetry, isTransientLLMError, llmContentToText } from "@/lib/llm";
 import { getAvailabilityWindow } from "@/lib/availability";
 import { appointmentTypeIds } from "@/lib/data";
-import { boundedSchedulerMessages, compactSchedulerReports, guardUnverifiedBookingClaim } from "@/lib/scheduler-context";
+import { upcomingAppointmentDates } from "@/lib/appointment-slot";
+import {
+    boundedSchedulerMessages,
+    compactSchedulerReports,
+    extractSchedulerTaggedJson,
+    guardUnverifiedBookingClaim,
+    replaceRelativeSchedulerDates,
+} from "@/lib/scheduler-context";
 
 export const runtime = "nodejs";
 const disclaimer = "For information only, not medical advice.";
+const bookingProposalSchema = z.object({
+    providerId: z.string().min(1),
+    providerName: z.string().min(1),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+    reason: z.string().trim().min(10).max(500),
+    appointmentType: z.enum(appointmentTypeIds),
+});
 
 export async function POST(req: NextRequest) {
     const { userId } = await auth();
@@ -30,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     let conversation;
     if (conversationId) {
-        conversation = await Conversation.findOne({ _id: conversationId, userId });
+        conversation = await Conversation.findOne({ _id: conversationId, userId, kind: "appointment" });
         if (!conversation) {
             return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
         }
@@ -61,11 +77,9 @@ export async function POST(req: NextRequest) {
         .select({ _id: 0, id: 1, name: 1, specialty: 1, hospital: 1, languages: 1 })
         .sort({ name: 1 }).limit(50).lean();
 
-    const upcomingDates = Array.from({ length: 14 }, (_, offset) => {
-        const date = new Date();
-        date.setUTCDate(date.getUTCDate() + offset);
-        return date.toISOString().slice(0, 10);
-    });
+    const appointmentTimeZone = process.env.APPOINTMENT_TIME_ZONE?.trim() || "Asia/Kolkata";
+    const upcomingDates = upcomingAppointmentDates(14, new Date(), appointmentTimeZone);
+    const currentDate = upcomingDates[0];
     const providerAvailability = await Promise.all(availableProviders.map(async (provider) => {
         const days = await getAvailabilityWindow(provider.id, upcomingDates);
         const slots = Object.entries(days).flatMap(([date, availability]) =>
@@ -89,6 +103,7 @@ export async function POST(req: NextRequest) {
         - **Available Providers:** ${JSON.stringify(providersWithOpenings)}
         - **Verified Available Slots (next 14 days):** ${JSON.stringify(openAvailability)}
         - **Allowed Appointment Types:** ${JSON.stringify(appointmentTypeIds)}
+        - **Current scheduling date:** ${currentDate} (${appointmentTimeZone})
 
         **Your Task Flow:**
         1.  **Analyze the User's Request:** Carefully read the user's message to understand their current issue, symptoms, or desired appointment type.
@@ -100,7 +115,8 @@ export async function POST(req: NextRequest) {
         6.  **Gather Scheduling Details:** Ask for the user's preferred date and time.
         7.  **Proposal Confirmation:** Once a time is chosen, ask whether the proposed details are correct. This does not book anything.
         8.  **Booking Ready:** When the user confirms all details, write BOOKING_READY followed by one JSON object containing providerId, providerName, date, time, reason, and appointmentType. The providerId must exist in Available Providers, the exact date/time pair must exist in Verified Available Slots, and appointmentType must be copied from Allowed Appointment Types. Say only: "Your appointment details are ready. Select Schedule Appointment below to complete the booking." Never say or imply that an appointment is confirmed, booked, scheduled, or reserved, and never promise a reminder; only the authenticated server action can do those things.
-        8a. **Booking Field Rules:** date must be YYYY-MM-DD copied from the matrix (never "tomorrow" or any other words); time must be HH:MM 24-hour copied from the matrix (e.g. "10:00", never "10AM"); reason must be at least 10 characters describing the visit; appointmentType must be exactly one id from Allowed Appointment Types (e.g. "check-up", never "checkup").
+        8a. **Booking Field Rules:** In both prose and JSON, use only an absolute YYYY-MM-DD date copied from the matrix. Never use relative words such as "today" or "tomorrow". time must be HH:MM 24-hour copied from the matrix (e.g. "10:00", never "10AM"); reason must be at least 10 characters describing the visit; appointmentType must be exactly one id from Allowed Appointment Types (e.g. "check-up", never "checkup").
+        8b. **Machine Format:** BOOKING_READY must be followed immediately by a raw JSON object. Do not wrap the JSON in markdown or a code fence.
 
         **Interaction Style:**
         - Be empathetic, professional, and conversational.
@@ -132,7 +148,50 @@ export async function POST(req: NextRequest) {
         const response = await invokeWithRetry(() => model.invoke(langchainMessages));
         let fullResponse = llmContentToText(response.content).trim();
         if (!fullResponse) throw new Error("AI provider returned an empty scheduler response");
-        fullResponse = guardUnverifiedBookingClaim(fullResponse);
+
+        let bookingCandidate = extractSchedulerTaggedJson<unknown>(fullResponse, "BOOKING_READY");
+        if (!bookingCandidate && /appointment details are ready|complete the booking/i.test(fullResponse)) {
+            const corrected = await invokeWithRetry(() => model.invoke([
+                ...langchainMessages,
+                new AIMessage(fullResponse),
+                new SystemMessage(
+                    "FORMAT CORRECTION: Your previous answer said the booking details were ready but omitted a parseable BOOKING_READY payload. Return the same concise user-facing sentence followed immediately by BOOKING_READY and one raw JSON object with providerId, providerName, date, time, reason, and appointmentType. Use only the verified provider and slot data above. Do not use markdown fences and do not claim the appointment is booked.",
+                ),
+            ]));
+            const correctedText = llmContentToText(corrected.content).trim();
+            const correctedCandidate = extractSchedulerTaggedJson<unknown>(correctedText, "BOOKING_READY");
+            if (correctedCandidate) {
+                fullResponse = correctedText;
+                bookingCandidate = correctedCandidate;
+            }
+        }
+
+        let hasValidatedBooking = false;
+        const parsedBooking = bookingProposalSchema.safeParse(bookingCandidate);
+        if (bookingCandidate && parsedBooking.success) {
+            const proposal = parsedBooking.data;
+            const provider = providersWithOpenings.find((entry) =>
+                entry.id === proposal.providerId && entry.name === proposal.providerName);
+            const slotIsOpen = openAvailability.some((entry) =>
+                entry.providerId === proposal.providerId && entry.slots.some((slot) =>
+                    slot.date === proposal.date && slot.time === proposal.time));
+
+            if (provider && slotIsOpen) {
+                hasValidatedBooking = true;
+                fullResponse = [
+                    "Your appointment details are ready. Select Schedule Appointment below to complete the booking.",
+                    `BOOKING_READY ${JSON.stringify(proposal)}`,
+                ].join("\n\n");
+            } else {
+                fullResponse = "I could not validate that provider and time as an available booking. Your appointment has not been booked; please choose another listed slot.";
+            }
+        } else if (bookingCandidate) {
+            fullResponse = "I could not validate all required booking details. Your appointment has not been booked; please confirm the provider, date, time, visit type, and reason again.";
+        } else {
+            fullResponse = guardUnverifiedBookingClaim(fullResponse);
+        }
+
+        if (!hasValidatedBooking) fullResponse = replaceRelativeSchedulerDates(fullResponse, currentDate);
         if (!fullResponse.includes(disclaimer)) fullResponse += `\n\n${disclaimer}`;
 
         conversation.messages.push({
@@ -144,7 +203,7 @@ export async function POST(req: NextRequest) {
 
         return new Response(fullResponse, {
             headers: {
-                'Content-Type': 'text/plain',
+                'Content-Type': 'text/plain; charset=utf-8',
                 'X-Conversation-ID': conversation._id.toString()
             }
         });

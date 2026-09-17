@@ -3,7 +3,10 @@ import test from "node:test";
 import {
   boundedSchedulerMessages,
   compactSchedulerReports,
+  extractSchedulerTaggedJson,
   guardUnverifiedBookingClaim,
+  replaceRelativeSchedulerDates,
+  stripSchedulerMetadata,
 } from "../src/lib/scheduler-context.ts";
 
 test("scheduler report context is bounded", () => {
@@ -41,4 +44,23 @@ test("scheduler preserves a valid proposal but does not call it booked", () => {
   assert.match(guarded, /Select Schedule Appointment/i);
   assert.match(guarded, /BOOKING_READY/);
   assert.doesNotMatch(guarded, /appointment is confirmed/i);
+});
+
+test("scheduler protocol accepts fenced JSON and removes the complete metadata block", () => {
+  const response = 'Ready.\n\nBOOKING_READY ```json\n{"providerId":"dr-johnson","reason":"regular checkup"}\n```\n\nDisclaimer.';
+  assert.deepEqual(extractSchedulerTaggedJson(response, "BOOKING_READY"), {
+    providerId: "dr-johnson",
+    reason: "regular checkup",
+  });
+  const clean = stripSchedulerMetadata(response);
+  assert.equal(clean.trim(), "Ready.\n\n\n\nDisclaimer.");
+  assert.doesNotMatch(clean, /```|BOOKING_READY/);
+});
+
+test("scheduler replaces misleading relative dates with the explicit clinic date", () => {
+  const response = replaceRelativeSchedulerDates(
+    "I can see you tomorrow at 08:30 on 2026-09-17.",
+    "2026-09-17",
+  );
+  assert.equal(response, "I can see you on 2026-09-17 at 08:30 on 2026-09-17.");
 });

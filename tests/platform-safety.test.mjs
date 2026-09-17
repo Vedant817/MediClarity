@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { File } from "node:buffer";
 import {
+  appointmentDateInTimeZone,
   appointmentTimeVariants,
   isCanonicalAppointmentDate,
   normalizeAppointmentTime,
+  upcomingAppointmentDates,
 } from "../src/lib/appointment-slot.ts";
 import { labToFhirObservation } from "../src/lib/fhir.ts";
 import { isValidShareToken } from "../src/lib/share-token.ts";
@@ -22,6 +24,16 @@ test("appointment dates and legacy times normalize without accepting impossible 
   assert.equal(normalizeAppointmentTime("12:05 AM"), "00:05");
   assert.equal(normalizeAppointmentTime("12:05 PM"), "12:05");
   assert.deepEqual(appointmentTimeVariants("18:30"), ["18:30", "6:30 PM"]);
+});
+
+test("appointment dates use the configured clinic timezone at UTC boundaries", () => {
+  const instant = new Date("2026-09-16T20:30:00.000Z");
+  assert.equal(appointmentDateInTimeZone(instant, "Asia/Kolkata"), "2026-09-17");
+  assert.deepEqual(upcomingAppointmentDates(3, instant, "Asia/Kolkata"), [
+    "2026-09-17",
+    "2026-09-18",
+    "2026-09-19",
+  ]);
 });
 
 test("emergency symptom pairs override a falsely reassuring model response", () => {

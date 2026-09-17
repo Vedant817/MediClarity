@@ -1,5 +1,32 @@
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+export function appointmentDateInTimeZone(
+  value: Date = new Date(),
+  timeZone = process.env.APPOINTMENT_TIME_ZONE?.trim() || "Asia/Kolkata",
+): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+export function upcomingAppointmentDates(
+  count: number,
+  value: Date = new Date(),
+  timeZone = process.env.APPOINTMENT_TIME_ZONE?.trim() || "Asia/Kolkata",
+): string[] {
+  const firstDate = appointmentDateInTimeZone(value, timeZone);
+  const [year, month, day] = firstDate.split("-").map(Number);
+  return Array.from({ length: count }, (_, offset) => {
+    const date = new Date(Date.UTC(year, month - 1, day + offset));
+    return date.toISOString().slice(0, 10);
+  });
+}
+
 export function isCanonicalAppointmentDate(value: string): boolean {
   if (!ISO_DATE_PATTERN.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);

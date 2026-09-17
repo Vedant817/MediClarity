@@ -9,21 +9,7 @@ import { createAppointment } from '@/actions/appointment';
 import { BookingData, Doctor } from '@/types';
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-
-function extractTaggedJson<T>(message: string, tag: 'SUGGESTED_DOCTORS' | 'BOOKING_READY'): T | null {
-    const pattern = tag === 'SUGGESTED_DOCTORS'
-        ? /SUGGESTED_DOCTORS\s*(\[[\s\S]*?\])/m
-        : /BOOKING_READY\s*(\{[\s\S]*?\})/m;
-    const jsonMatch = message.match(pattern);
-    if (jsonMatch) {
-        try {
-            return JSON.parse(jsonMatch[1]) as T;
-        } catch (e) {
-            console.error('Failed to parse JSON data:', e);
-        }
-    }
-    return null;
-}
+import { extractSchedulerTaggedJson, stripSchedulerMetadata } from '@/lib/scheduler-context';
 
 /**
  * Strip streaming artifacts from assistant text before rendering/saving:
@@ -32,10 +18,7 @@ function extractTaggedJson<T>(message: string, tag: 'SUGGESTED_DOCTORS' | 'BOOKI
  * blank lines. Lines with real content (including list items) are kept.
  */
 function cleanAssistantText(content: string): string {
-    return content
-        .replace(/SUGGESTED_DOCTORS[\s\S]*?\]/, '')
-        .replace(/BOOKING_READY[\s\S]*?\}/, '')
-        .replace(/BOOKING_READY|SUGGESTED_DOCTORS/g, '')
+    return stripSchedulerMetadata(content)
         .split('\n')
         .filter((line) => !/^\s*\*{1,3}\s*$/.test(line))
         .join('\n')
@@ -49,8 +32,10 @@ export default function ConversationalScheduler() {
     const [messages, setMessages] = useState<{ id: string; role: 'user' | 'assistant' | 'system'; content: string }[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isBooking, setIsBooking] = useState(false);
     const [isBookingReady, setIsBookingReady] = useState(false);
     const [bookingData, setBookingData] = useState<BookingData | null>(null);
+    const [bookingIssue, setBookingIssue] = useState<{ messageId: string; content: string } | null>(null);
     const [suggestedDoctors, setSuggestedDoctors] = useState<Doctor[]>([]);
     const [conversationId, setConversationId] = useState<string | null>(null);
     const [providerCatalog, setProviderCatalog] = useState<Array<{ id: string; name: string; specialty: string }>>([]);
@@ -98,6 +83,86 @@ export default function ConversationalScheduler() {
             .catch(() => setProviderCatalog([]));
     }, [user?.id]);
 
+    useEffect(() => {
+        if (providerCatalog.length === 0 || isLoading) return;
+        const controller = new AbortController();
+        const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+        if (!latestAssistant) {
+            setSuggestedDoctors([]);
+            setBookingData(null);
+            setIsBookingReady(false);
+            setBookingIssue(null);
+            return () => controller.abort();
+        }
+
+        const doctors = extractSchedulerTaggedJson<Doctor[]>(latestAssistant.content, 'SUGGESTED_DOCTORS');
+        setSuggestedDoctors(Array.isArray(doctors) ? doctors.filter((doctor) => providerCatalog.some((provider) =>
+            provider.id === doctor.id && provider.name === doctor.name && provider.specialty === doctor.specialty)) : []);
+
+        const booking = extractSchedulerTaggedJson<BookingData>(latestAssistant.content, 'BOOKING_READY');
+        if (!booking) {
+            setBookingData(null);
+            setIsBookingReady(false);
+            setBookingIssue(null);
+            return () => controller.abort();
+        }
+
+        const provider = booking && providerCatalog.find((entry) =>
+            entry.id === booking.providerId && entry.name === booking.providerName);
+        const complete = Boolean(
+            provider && booking?.date && booking.time && booking.reason && booking.reason.length >= 10 && booking.appointmentType,
+        );
+        if (!complete || !provider || !booking.date || !booking.time) {
+            setBookingData(null);
+            setIsBookingReady(false);
+            setBookingIssue({
+                messageId: latestAssistant.id,
+                content: 'I could not validate all booking details. No appointment was booked. Please ask the scheduler for another provider and time.',
+            });
+            return () => controller.abort();
+        }
+
+        fetch(`/api/availability?providerId=${encodeURIComponent(provider.id)}&date=${encodeURIComponent(booking.date)}`, {
+            signal: controller.signal,
+            cache: 'no-store',
+        })
+            .then((response) => response.ok ? response.json() : Promise.reject(new Error('Availability validation failed')))
+            .then((data: { availableTimes?: string[]; ownedScheduledTimes?: string[] }) => {
+                if (data.ownedScheduledTimes?.includes(booking.time!)) {
+                    setBookingData(null);
+                    setIsBookingReady(false);
+                    setBookingIssue({
+                        messageId: latestAssistant.id,
+                        content: `This appointment is scheduled with ${provider.name} on ${booking.date} at ${booking.time}.`,
+                    });
+                    return;
+                }
+                if (!data.availableTimes?.includes(booking.time!)) {
+                    setBookingData(null);
+                    setIsBookingReady(false);
+                    setBookingIssue({
+                        messageId: latestAssistant.id,
+                        content: `The proposed ${booking.time} slot on ${booking.date} is not available. No appointment was booked. Please ask for another listed time.`,
+                    });
+                    return;
+                }
+                setBookingData({ ...booking, providerName: provider.name });
+                setIsBookingReady(true);
+                setBookingIssue(null);
+            })
+            .catch((error) => {
+                if (error instanceof Error && error.name === 'AbortError') return;
+                setBookingData(null);
+                setIsBookingReady(false);
+                setBookingIssue({
+                    messageId: latestAssistant.id,
+                    content: 'I could not verify that slot against live availability. No appointment was booked. Please try again.',
+                });
+            });
+
+        return () => controller.abort();
+    }, [messages, providerCatalog, isLoading]);
+
     const clearChat = async () => {
         if (conversationId) {
             const response = await fetch(`/api/appointment/scheduler/history?conversationId=${encodeURIComponent(conversationId)}`, { method: 'DELETE' });
@@ -109,6 +174,7 @@ export default function ConversationalScheduler() {
         setMessages([]);
         setIsBookingReady(false);
         setBookingData(null);
+        setBookingIssue(null);
         setSuggestedDoctors([]);
         setConversationId(null);
     };
@@ -193,32 +259,6 @@ export default function ConversationalScheduler() {
                 });
             }
 
-            const finalContent = assistantMessage.content;
-
-            if (finalContent.includes('SUGGESTED_DOCTORS')) {
-                const doctors = extractTaggedJson<Doctor[]>(finalContent, 'SUGGESTED_DOCTORS');
-                if (Array.isArray(doctors)) {
-                    setSuggestedDoctors(doctors.filter((doctor) => providerCatalog.some((provider) =>
-                        provider.id === doctor.id && provider.name === doctor.name && provider.specialty === doctor.specialty)));
-                }
-            }
-
-            if (finalContent.includes('BOOKING_READY')) {
-                const bookingInfo = extractTaggedJson<BookingData>(finalContent, 'BOOKING_READY');
-                const provider = bookingInfo && providerCatalog.find((entry) => entry.id === bookingInfo.providerId && entry.name === bookingInfo.providerName);
-                if (bookingInfo && provider) {
-                    setBookingData(bookingInfo);
-                    setIsBookingReady(true);
-                }
-            }
-
-            const conversationalText = cleanAssistantText(finalContent);
-
-            setMessages(prev => {
-                const newMessages = [...prev];
-                newMessages[newMessages.length - 1] = { ...assistantMessage, content: conversationalText };
-                return newMessages;
-            });
         } catch (error) {
             if (error instanceof Error && error.name === 'AbortError') {
                 return;
@@ -244,7 +284,7 @@ export default function ConversationalScheduler() {
         } finally {
             setIsLoading(false);
         }
-    }, [user, conversationId, input, providerCatalog]);
+    }, [user, conversationId, input]);
 
     const stopGeneration = () => {
         if (abortControllerRef.current) {
@@ -275,6 +315,7 @@ export default function ConversationalScheduler() {
 
     const handleFinalBooking = async () => {
         if (user && bookingData?.providerId && bookingData.date && bookingData.time && bookingData.reason && bookingData.appointmentType) {
+            setIsBooking(true);
             const formData = new FormData();
             formData.append('providerId', bookingData.providerId);
             formData.append('date', bookingData.date);
@@ -282,13 +323,25 @@ export default function ConversationalScheduler() {
             formData.append('reason', bookingData.reason);
             formData.append('appointmentType', bookingData.appointmentType);
 
-            const result = await createAppointment(null, formData);
-
-            if (result.success) {
-                toast.success("Appointment scheduled successfully!");
-                router.push('/dashboard/appointments');
-            } else {
-                toast.error(`Failed to schedule appointment: ${result.error}`);
+            try {
+                const result = await createAppointment(null, formData);
+                if (result.success) {
+                    toast.success("Appointment scheduled successfully!");
+                    setBookingData(null);
+                    setIsBookingReady(false);
+                    const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+                    if (latestAssistant) {
+                        setBookingIssue({
+                            messageId: latestAssistant.id,
+                            content: `This appointment is scheduled with ${bookingData.providerName ?? 'the selected provider'} on ${bookingData.date} at ${bookingData.time}.`,
+                        });
+                    }
+                    router.refresh();
+                } else {
+                    toast.error(`Failed to schedule appointment: ${result.error}`);
+                }
+            } finally {
+                setIsBooking(false);
             }
         } else toast.error('The suggested booking is incomplete. Ask the scheduler for provider, type, date, time, and reason.');
     };
@@ -309,7 +362,11 @@ export default function ConversationalScheduler() {
                         className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div
                             className={`w-fit min-w-0 max-w-[80%] break-words p-3 rounded-lg ${m.role === 'user' ? 'bg-blue-500 text-white rounded-br-none' : 'bg-gray-200 text-gray-800 rounded-bl-none overflow-hidden'}`}>
-                            <Markdown>{m.role === 'assistant' ? cleanAssistantText(m.content) : m.content}</Markdown>
+                            <Markdown>
+                                {m.role === 'assistant'
+                                    ? bookingIssue?.messageId === m.id ? bookingIssue.content : cleanAssistantText(m.content)
+                                    : m.content}
+                            </Markdown>
                         </div>
                     </div>
                 ))}
@@ -351,8 +408,8 @@ export default function ConversationalScheduler() {
                             <p><strong>Date:</strong> {bookingData.date}</p>
                             <p><strong>Time:</strong> {bookingData.time}</p>
                             <p><strong>Reason:</strong> {bookingData.reason}</p>
-                            <Button onClick={handleFinalBooking} className="mt-4 w-full bg-green-600 hover:bg-green-700">
-                                Schedule Appointment
+                            <Button onClick={handleFinalBooking} disabled={isBooking} className="mt-4 w-full bg-green-600 hover:bg-green-700">
+                                {isBooking ? 'Scheduling...' : 'Schedule Appointment'}
                             </Button>
                         </CardContent>
                     </Card>

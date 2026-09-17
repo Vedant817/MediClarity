@@ -19,14 +19,15 @@ export async function GET(req: NextRequest) {
         
         if (conversationId) {
             // Fetch specific conversation
-            conversation = await Conversation.findOne({ 
-                _id: conversationId, 
-                userId 
+            conversation = await Conversation.findOne({
+                _id: conversationId,
+                userId,
+                kind: 'appointment',
             });
         } else {
             // Fetch latest conversation for user
-            conversation = await Conversation.findOne({ userId })
-                .sort({ createdAt: -1 });
+            conversation = await Conversation.findOne({ userId, kind: 'appointment' })
+                .sort({ updatedAt: -1 });
         }
 
         if (!conversation) {

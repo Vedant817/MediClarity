@@ -36,11 +36,14 @@ export default function Markdown({ children, className }: MarkdownProps) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkHtmlBreaks]}
         components={{
-          table: ({ node, ...props }) => (
-            <div className="overflow-x-auto my-3 max-w-full">
-              <table {...props} />
-            </div>
-          ),
+          table: ({ node, ...props }) => {
+            void node;
+            return (
+              <div className="overflow-x-auto my-3 max-w-full">
+                <table {...props} />
+              </div>
+            );
+          },
         }}
       >
         {children || ""}
