@@ -11,6 +11,7 @@ const MIN_SPEECH_MS = 180;
 const END_SILENCE_MS = 640;
 const MAX_UTTERANCE_MS = 25_000;
 const PRE_ROLL_MS = 180;
+const TRANSCRIBE_RETRY_MS = 600;
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === "AbortError" || /aborted|AbortError/i.test(error.message));
@@ -18,12 +19,40 @@ function isAbortError(error: unknown): boolean {
 
 function aiErrorMetadata(error: unknown) {
   if (!error || typeof error !== "object") return { kind: typeof error };
-  const candidate = error as { name?: unknown; code?: unknown; status?: unknown };
+  const candidate = error as { name?: unknown; message?: unknown; code?: unknown; status?: unknown };
+  const message = typeof candidate.message === "string"
+    ? candidate.message
+        .replace(/eyJ[A-Za-z0-9._-]+/g, "[redacted-token]")
+        .replace(/([?&](?:token|key|secret)=)[^&\s]+/gi, "$1[redacted]")
+        .slice(0, 240)
+    : undefined;
   return {
     name: typeof candidate.name === "string" ? candidate.name : "UnknownError",
+    message,
     code: typeof candidate.code === "string" || typeof candidate.code === "number" ? candidate.code : undefined,
     status: typeof candidate.status === "number" ? candidate.status : undefined,
   };
+}
+
+function retryableAiError(error: unknown) {
+  if (isAbortError(error)) return false;
+  if (!error || typeof error !== "object") return true;
+  const status = (error as { status?: unknown }).status;
+  return typeof status !== "number" || status === 408 || status === 429 || status >= 500;
+}
+
+function abortableDelay(milliseconds: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(resolve, milliseconds);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }, { once: true });
+  });
 }
 
 function concatenate(chunks: ArrayBuffer[]): Uint8Array {
@@ -83,6 +112,26 @@ async function transcribe(
     no_speech_threshold: 0.62,
   }, { signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]) });
   return typeof result.text === "string" ? result.text.trim() : "";
+}
+
+async function transcribeWithRetry(
+  ai: Ai,
+  locale: VoiceLocale,
+  audio: Uint8Array,
+  signal: AbortSignal,
+) {
+  try {
+    return await transcribe(ai, locale, audio, signal);
+  } catch (error) {
+    if (!retryableAiError(error)) throw error;
+    console.warn("voice.transcribe_retry", {
+      ...aiErrorMetadata(error),
+      audioBytes: audio.byteLength,
+      audioMs: Math.round((audio.byteLength / 2 / SAMPLE_RATE) * 1_000),
+    });
+    await abortableDelay(TRANSCRIBE_RETRY_MS, signal);
+    return transcribe(ai, locale, audio, signal);
+  }
 }
 
 class WorkersAIWhisperSession implements TranscriberSession {
@@ -157,11 +206,15 @@ class WorkersAIWhisperSession implements TranscriberSession {
     this.pending = this.pending.then(async () => {
       if (this.closed) return;
       try {
-        const transcript = await transcribe(this.ai, this.locale, audio, this.abortController.signal);
+        const transcript = await transcribeWithRetry(this.ai, this.locale, audio, this.abortController.signal);
         if (!this.closed && transcript) this.options.onUtterance?.(transcript);
       } catch (error: unknown) {
         if (this.closed || isAbortError(error)) return;
-        console.error("voice.transcribe_failed", aiErrorMetadata(error));
+        console.error("voice.transcribe_failed", {
+          ...aiErrorMetadata(error),
+          audioBytes: audio.byteLength,
+          audioMs: Math.round((audio.byteLength / 2 / SAMPLE_RATE) * 1_000),
+        });
       }
     });
   }

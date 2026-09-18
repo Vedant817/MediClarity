@@ -71,6 +71,23 @@ describe("multilingual speech safety", () => {
     session.close();
   });
 
+  it("retries one transient Workers AI transcription failure", async () => {
+    const uttered = vi.fn();
+    const run = vi.fn()
+      .mockRejectedValueOnce(new Error("remote binding is not ready"))
+      .mockResolvedValueOnce({ text: "What are my latest results?" });
+    const session = new WorkersAIWhisperTranscriber({ run } as unknown as Ai, "en-IN").createSession({
+      onUtterance: uttered,
+    });
+    session.feed(new Int16Array(3_200).fill(12_000).buffer);
+    session.feed(new Int16Array(11_200).buffer);
+    await vi.waitFor(() => expect(uttered).toHaveBeenCalledWith("What are my latest results?"), {
+      timeout: 1_500,
+    });
+    expect(run).toHaveBeenCalledTimes(2);
+    session.close();
+  });
+
   it("measures PCM energy for adaptive voice activity detection", () => {
     const silence = new Int16Array(320).buffer;
     const speech = new Int16Array(320).fill(12_000).buffer;
