@@ -13,6 +13,7 @@ import { cancelAppointment, getAppointments, rescheduleAppointment, updateAppoin
 import { appointmentDateInTimeZone } from '@/lib/appointment-slot';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -373,18 +374,20 @@ export default function HealthTimeline() {
                         </div>
                         <div>
                             <label className="mb-1 block text-sm font-medium" htmlFor="reschedule-time">Available time</label>
-                            <select
-                                id="reschedule-time"
-                                className="w-full rounded border p-2"
-                                value={rescheduleTime}
-                                onChange={(event) => setRescheduleTime(event.target.value)}
+                            <Select
+                                value={rescheduleTime || undefined}
+                                onValueChange={setRescheduleTime}
                                 disabled={!rescheduleDate || rescheduleLoading}
                             >
-                                <option value="">{rescheduleLoading ? 'Loading availability…' : rescheduleTimes.length ? 'Select a time' : 'No open slots on this date'}</option>
-                                {rescheduleTimes.map((slot) => (
-                                    <option key={slot.value} value={slot.value}>{slot.label}</option>
-                                ))}
-                            </select>
+                                <SelectTrigger id="reschedule-time" className="w-full">
+                                    <SelectValue placeholder={rescheduleLoading ? 'Loading availability…' : rescheduleTimes.length ? 'Select a time' : 'No open slots on this date'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {rescheduleTimes.map((slot) => (
+                                        <SelectItem key={slot.value} value={slot.value}>{slot.label}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                             {rescheduleHint ? <p className="mt-1 text-xs text-amber-800">{rescheduleHint}</p> : null}
                         </div>
                     </div>

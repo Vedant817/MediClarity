@@ -7,6 +7,7 @@ import { appointmentTypes } from '@/lib/data';
 import { appointmentDateInTimeZone } from '@/lib/appointment-slot';
 import { createAppointment } from '@/actions/appointment';
 import { useAppointmentStore } from '@/store/appointment';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type Provider = {
     id: string;
@@ -108,34 +109,37 @@ export default function EnhancedAppointmentFlow({ providers }: { providers: Prov
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Physician</label>
-                        <select
-                            className="w-full border rounded p-2"
-                            value={selectedProvider}
-                            onChange={(e) => setSelectedProvider(e.target.value)}
-                        >
-                            <option value="">Select a physician</option>
-                            {providers.map(provider => (
-                                <option key={provider.id} value={provider.id}>
-                                    {provider.name} - {provider.specialty}
-                                </option>
-                            ))}
-                        </select>
+                        <Select value={selectedProvider || undefined} onValueChange={setSelectedProvider}>
+                            <SelectTrigger aria-label="Physician" className="w-full">
+                                <SelectValue placeholder="Select a physician" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {providers.map((provider) => (
+                                    <SelectItem key={provider.id} value={provider.id}>
+                                        {provider.name} — {provider.specialty}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Available time</label>
-                        <select
-                            className="w-full border rounded p-2"
-                            value={selectedTime}
-                            onChange={(e) => setSelectedTime(e.target.value)}
+                        <Select
+                            value={selectedTime || undefined}
+                            onValueChange={setSelectedTime}
                             disabled={!selectedProvider || !selectedDate || availabilityLoading}
                         >
-                            <option value="">{availabilityLoading ? 'Loading availability…' : availableTimes.length ? 'Select a time' : 'No configured slots'}</option>
-                            {availableTimes.map(slot => (
-                                <option key={slot.value} value={slot.value}>
-                                    {slot.label}
-                                </option>
-                            ))}
-                        </select>
+                            <SelectTrigger aria-label="Available time" className="w-full">
+                                <SelectValue placeholder={availabilityLoading ? 'Loading availability…' : availableTimes.length ? 'Select a time' : 'No configured slots'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availableTimes.map((slot) => (
+                                    <SelectItem key={slot.value} value={slot.value}>
+                                        {slot.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
             ),

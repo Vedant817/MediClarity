@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Markdown from "@/components/Markdown";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toCaptionExcerpt } from "@/lib/summary-excerpt";
 import { getOrganModel } from "@/lib/anatomy/registry";
 import { ORGAN_DISPLAY_NAMES, ORGAN_IDS, VISUALIZATION_COPY, type OrganId, type VisualizationSuggestion } from "@/lib/anatomy/types";
@@ -208,19 +209,21 @@ export default function ReportVisualize({ reportId, summary, labs = [] }: { repo
       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
         <label className="flex flex-col gap-2 text-sm text-slate-600 sm:flex-row sm:items-center">
           <span className="font-semibold">Not the right area?</span>
-          <select
-            aria-label="Choose an organ to explore"
-            value={manualOrgan}
-            onChange={(event) => setManualOrgan(event.target.value as OrganId | "")}
-            className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-teal-600"
+          <Select
+            value={manualOrgan || undefined}
+            onValueChange={(value) => setManualOrgan(value as OrganId)}
           >
-            <option value="">Choose an organ to explore…</option>
-            {ORGAN_IDS.map((organId) => (
-              <option key={organId} value={organId}>
-                {ORGAN_DISPLAY_NAMES[organId]}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger aria-label="Choose an organ to explore" className="min-w-0 flex-1">
+              <SelectValue placeholder="Choose an organ to explore…" />
+            </SelectTrigger>
+            <SelectContent>
+              {ORGAN_IDS.map((organId) => (
+                <SelectItem key={organId} value={organId}>
+                  {ORGAN_DISPLAY_NAMES[organId]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
         <p className="mt-2 text-xs text-slate-500">
           Exploring an organ yourself is for learning only — it says nothing about your report.

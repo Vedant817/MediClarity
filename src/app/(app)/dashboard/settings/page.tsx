@@ -6,6 +6,7 @@ import { useClerk } from "@clerk/nextjs";
 import { CreditCard, Crown, Globe, LogOut, Shield } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VOICE_LANGUAGES, type PreferenceLocale } from "@/config/voice-languages";
 
 const languages = Object.fromEntries(
@@ -51,9 +52,24 @@ export default function SettingsPage() {
       <header className="mb-6 border-l-4 border-teal-600 pl-5"><p className="font-mono text-xs uppercase tracking-[0.2em] text-teal-700">Account controls</p><h1 className="mt-2 text-3xl font-semibold">Settings</h1></header>
       <div className="mx-auto max-w-4xl space-y-6">
         <Card><CardHeader><CardTitle className="flex items-center gap-2"><Globe className="h-5 w-5 text-teal-700" />Locale pack</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2">
-          <label className="text-sm font-medium">Language<select className="mt-2 w-full rounded-md border bg-white p-2" value={preferences.locale} onChange={(event) => setPreferences({ ...preferences, locale: event.target.value as Preferences["locale"] })}>{Object.entries(languages).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label className="text-sm font-medium">Date display<select className="mt-2 w-full rounded-md border bg-white p-2" value={preferences.dateFormat} onChange={(event) => setPreferences({ ...preferences, dateFormat: event.target.value as Preferences["dateFormat"] })}>{["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY"].map((value) => <option key={value}>{value}</option>)}</select></label>
-          <label className="text-sm font-medium md:col-span-2">Deployment requirements profile<select className="mt-2 w-full rounded-md border bg-white p-2" value={preferences.regionProfile} onChange={(event) => setPreferences({ ...preferences, regionProfile: event.target.value as Preferences["regionProfile"] })}>{Object.entries(regions).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label className="text-sm font-medium">Language
+            <Select value={preferences.locale} onValueChange={(value) => setPreferences({ ...preferences, locale: value as Preferences["locale"] })}>
+              <SelectTrigger className="mt-2 w-full" aria-label="Language"><SelectValue /></SelectTrigger>
+              <SelectContent>{Object.entries(languages).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
+            </Select>
+          </label>
+          <label className="text-sm font-medium">Date display
+            <Select value={preferences.dateFormat} onValueChange={(value) => setPreferences({ ...preferences, dateFormat: value as Preferences["dateFormat"] })}>
+              <SelectTrigger className="mt-2 w-full" aria-label="Date display"><SelectValue /></SelectTrigger>
+              <SelectContent>{["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY"].map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
+            </Select>
+          </label>
+          <label className="text-sm font-medium md:col-span-2">Deployment requirements profile
+            <Select value={preferences.regionProfile} onValueChange={(value) => setPreferences({ ...preferences, regionProfile: value as Preferences["regionProfile"] })}>
+              <SelectTrigger className="mt-2 w-full" aria-label="Deployment requirements profile"><SelectValue /></SelectTrigger>
+              <SelectContent>{Object.entries(regions).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
+            </Select>
+          </label>
           <div className="flex items-center gap-3 md:col-span-2"><Button onClick={save} className="bg-teal-700 hover:bg-teal-800">Save preferences</Button><span className="text-sm text-slate-500" aria-live="polite">{status}</span></div>
         </CardContent></Card>
 

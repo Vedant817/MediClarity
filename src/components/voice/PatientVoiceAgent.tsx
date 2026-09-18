@@ -19,6 +19,7 @@ import {
   Wind,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   VOICE_LANGUAGES,
@@ -354,35 +355,43 @@ export default function PatientVoiceAgent() {
                   title={deviceVoiceAvailable === null ? "Checking installed device voices…" : deviceVoiceAvailable ? "A device voice is installed for this language" : "No device voice installed — transcript still works"}
                   aria-hidden="true"
                 />
-                <select
+                <Select
                   value={selectedLocale}
-                  onChange={(event) => {
-                    setSelectedLocale(event.target.value as VoiceLocale);
+                  onValueChange={(value) => {
+                    setSelectedLocale(value as VoiceLocale);
                     setSession(null);
                     setSessionError(null);
                   }}
                   disabled={active || isLoadingSession}
-                  className="rounded-lg border border-teal-200 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-teal-300 disabled:opacity-60"
                 >
-                  {VOICE_LANGUAGES.map((language) => (
-                    <option key={language.locale} value={language.locale}>
-                      {language.label} · {language.nativeLabel}{voiceSupport && !voiceSupport[language.locale] ? " · no device voice" : ""}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger aria-label="Spoken language" size="sm" className="w-[16rem] border-teal-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VOICE_LANGUAGES.map((language) => (
+                      <SelectItem key={language.locale} value={language.locale}>
+                        {language.label} · {language.nativeLabel}{voiceSupport && !voiceSupport[language.locale] ? " · no device voice" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </label>
               <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
                 <Wind className="h-4 w-4 text-teal-700" aria-hidden="true" />
                 Room noise
-                <select
+                <Select
                   value={noiseMode}
-                  onChange={(event) => setNoiseMode(event.target.value as "standard" | "noisy")}
+                  onValueChange={(value) => setNoiseMode(value as "standard" | "noisy")}
                   disabled={active || isLoadingSession}
-                  className="rounded-lg border border-teal-200 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-teal-300 disabled:opacity-60"
                 >
-                  <option value="standard">Standard</option>
-                  <option value="noisy">Noisy room</option>
-                </select>
+                  <SelectTrigger aria-label="Room noise" size="sm" className="w-[10rem] border-teal-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Standard</SelectItem>
+                    <SelectItem value="noisy">Noisy room</SelectItem>
+                  </SelectContent>
+                </Select>
               </label>
               <div className="flex items-center gap-2 rounded-full border border-teal-200 bg-white/80 px-3 py-2 font-mono text-[11px] text-slate-600 shadow-sm">
                 <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-500" : "bg-slate-300"}`} aria-hidden="true" />
