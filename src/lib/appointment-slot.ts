@@ -111,11 +111,15 @@ export function isCanonicalAppointmentTime(value: string): boolean {
   return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(normalized);
 }
 
-export function appointmentTimeVariants(value: string): string[] {
+export function formatSlotTimeLabel(value: string): string {
   const normalized = normalizeAppointmentTime(value);
   const [hours, minutes] = normalized.split(":").map(Number);
-  const legacyLabel = Number.isFinite(hours) && Number.isFinite(minutes)
-    ? `${hours % 12 || 12}:${String(minutes).padStart(2, "0")} ${hours < 12 ? "AM" : "PM"}`
-    : undefined;
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
+  return `${hours % 12 || 12}:${String(minutes).padStart(2, "0")} ${hours < 12 ? "AM" : "PM"}`;
+}
+
+export function appointmentTimeVariants(value: string): string[] {
+  const normalized = normalizeAppointmentTime(value);
+  const legacyLabel = formatSlotTimeLabel(normalized);
   return Array.from(new Set([normalized, value.trim(), legacyLabel].filter(Boolean) as string[]));
 }

@@ -4,13 +4,19 @@ import {
   boundedSchedulerMessages,
   canonicalizeSchedulerResponse,
   compactSchedulerReports,
+  doctorDisplayName,
+  extractAvailableSlots,
   extractSchedulerTaggedJson,
   extractSuggestedDoctors,
   formatLooseSlotListing,
   formatVerifiedSlotsForPrompt,
   guardUnverifiedBookingClaim,
+  matchProviderFromText,
+  bookingProposalAlreadyCompleted,
   replaceRelativeSchedulerDates,
   resolveRelativeBookingDate,
+  retireConsumedProposalMessages,
+  retireSchedulerActionMessages,
   stripSchedulerMetadata,
 } from "../src/lib/scheduler-context.ts";
 
@@ -118,4 +124,63 @@ test("tomorrow in the user request wins over a today-dated proposal", () => {
   assert.equal(resolveRelativeBookingDate("book tomorrow at 10 am", "2026-09-18", "2026-09-18"), "2026-09-19");
   assert.equal(resolveRelativeBookingDate("book today at 10 am", "2026-09-19", "2026-09-18"), "2026-09-18");
   assert.equal(resolveRelativeBookingDate("yes please", "2026-09-21", "2026-09-18"), "2026-09-21");
+});
+
+test("doctor display names do not stack an extra Dr. prefix", () => {
+  assert.equal(doctorDisplayName("Dr. Michael Johnson"), "Dr. Michael Johnson");
+  assert.equal(doctorDisplayName("dr Michael Johnson"), "Dr. Michael Johnson");
+  assert.equal(doctorDisplayName("Michael Johnson"), "Dr. Michael Johnson");
+});
+
+test("provider matching uses the full name and prefers the longer match", () => {
+  const providers = [
+    { id: "dr-smith", name: "Dr. Sarah Smith" },
+    { id: "dr-johnson", name: "Dr. Michael Johnson" },
+  ];
+  assert.equal(matchProviderFromText("I'd like to schedule with Dr. Michael Johnson.", providers)?.id, "dr-johnson");
+  assert.equal(matchProviderFromText("I need a liver checkup", providers), undefined);
+});
+
+test("completed bookings retire BOOKING_READY so the schedule card cannot return", () => {
+  const confirmation = "This appointment is scheduled with Dr. Sarah Smith on 2026-09-21 at 10:00.";
+  const retired = retireSchedulerActionMessages([
+    { role: "user", content: "Book that slot" },
+    { role: "assistant", content: `Your appointment details are ready.\n\nBOOKING_READY ${JSON.stringify({
+      providerId: "dr-smith",
+      date: "2026-09-18",
+      time: "10:00",
+    })}` },
+  ], confirmation);
+  assert.equal(retired[1].content, confirmation);
+  assert.equal(extractSchedulerTaggedJson(retired[1].content, "BOOKING_READY"), null);
+});
+
+test("only the completed slot is treated as already booked, not a later reschedule target", () => {
+  const original = { providerId: "dr-smith", date: "2026-09-18", time: "10:00" };
+  const moved = { providerId: "dr-smith", date: "2026-09-22", time: "14:00" };
+  assert.equal(bookingProposalAlreadyCompleted(original, [], null), false);
+  assert.equal(bookingProposalAlreadyCompleted(original, [original], null), true);
+  assert.equal(bookingProposalAlreadyCompleted(moved, [{ providerId: "dr-smith", date: "2026-09-22", time: "15:00" }], null), false);
+});
+
+test("retiring a completed booking leaves a later reschedule payload intact", () => {
+  const booking = { providerId: "dr-smith", date: "2026-09-18", time: "10:00" };
+  const reschedule = { appointmentId: "abc", providerId: "dr-smith", date: "2026-09-22", time: "14:00", providerName: "Dr. Sarah Smith" };
+  const retired = retireConsumedProposalMessages([
+    { role: "assistant", content: `BOOKING_READY ${JSON.stringify(booking)}` },
+    { role: "assistant", content: `RESCHEDULE_READY ${JSON.stringify(reschedule)}` },
+  ], { ...booking, summary: "Booked." });
+  assert.equal(retired[0].content, "Booked.");
+  assert.deepEqual(extractSchedulerTaggedJson(retired[1].content, "RESCHEDULE_READY"), reschedule);
+});
+
+test("available slot payloads are stripped from visible scheduler text", () => {
+  const canonical = canonicalizeSchedulerResponse({
+    prose: "Choose a time below.",
+    slots: [{ providerId: "dr-johnson", slots: [{ date: "2026-09-21", time: "10:00" }] }],
+  });
+  assert.deepEqual(extractAvailableSlots(canonical), [
+    { providerId: "dr-johnson", slots: [{ date: "2026-09-21", time: "10:00" }] },
+  ]);
+  assert.doesNotMatch(stripSchedulerMetadata(canonical), /dr-johnson|AVAILABLE_SLOTS/);
 });

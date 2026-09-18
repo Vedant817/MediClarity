@@ -12,7 +12,7 @@ export type SchedulerMessage = {
 
 import { addIsoDays } from "./appointment-slot.ts";
 
-export type SchedulerTag = "SUGGESTED_DOCTORS" | "BOOKING_READY" | "RESCHEDULE_READY";
+export type SchedulerTag = "SUGGESTED_DOCTORS" | "BOOKING_READY" | "RESCHEDULE_READY" | "AVAILABLE_SLOTS";
 
 export type SuggestedDoctor = {
   id: string;
@@ -129,7 +129,7 @@ export function extractSchedulerTaggedJson<T>(message: string, tag: SchedulerTag
 
 export function stripSchedulerMetadata(message: string): string {
   let result = normalizeSchedulerGlyphs(message);
-  for (const tag of ["SUGGESTED_DOCTORS", "BOOKING_READY", "RESCHEDULE_READY"] as const) {
+  for (const tag of ["SUGGESTED_DOCTORS", "BOOKING_READY", "RESCHEDULE_READY", "AVAILABLE_SLOTS"] as const) {
     let span = taggedJsonSpan(result, tag);
     while (span) {
       result = `${result.slice(0, span.start)}${result.slice(span.end)}`;
@@ -234,11 +234,69 @@ function jsonValueSpans(message: string): Array<{ json: string; start: number; e
   return spans;
 }
 
+function isProviderOpenings(value: unknown): value is ProviderOpenings {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as ProviderOpenings;
+  return typeof entry.providerId === "string" && Array.isArray(entry.slots)
+    && entry.slots.every((slot) => typeof slot?.date === "string" && typeof slot?.time === "string");
+}
+
 function looksLikeSchedulerPayload(value: unknown): boolean {
-  if (Array.isArray(value)) return value.length > 0 && value.every(isSuggestedDoctor);
+  if (Array.isArray(value)) {
+    return value.length > 0 && (value.every(isSuggestedDoctor) || value.every(isProviderOpenings));
+  }
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   return typeof record.providerId === "string" && typeof record.date === "string" && typeof record.time === "string";
+}
+
+export function doctorDisplayName(name: string): string {
+  const trimmed = name.replace(/\s+/g, " ").trim();
+  if (!trimmed) return trimmed;
+  const withoutTitle = trimmed.replace(/^dr\.?\s+/i, "").trim();
+  return withoutTitle ? `Dr. ${withoutTitle}` : trimmed;
+}
+
+export function matchProviderFromText(
+  text: string,
+  providers: Array<{ id: string; name: string }>,
+): { id: string; name: string } | undefined {
+  const normalized = text.toLowerCase();
+  const matches = providers
+    .map((provider) => {
+      const name = provider.name.toLowerCase();
+      const withoutTitle = name.replace(/^dr\.?\s+/, "");
+      if (normalized.includes(name) || (withoutTitle && normalized.includes(withoutTitle))) {
+        return { provider, score: withoutTitle.length };
+      }
+      if (normalized.includes(provider.id.toLowerCase())) return { provider, score: 1 };
+      return null;
+    })
+    .filter((entry): entry is { provider: { id: string; name: string }; score: number } => Boolean(entry))
+    .sort((left, right) => right.score - left.score);
+  return matches[0]?.provider;
+}
+
+export function capProviderOpenings(openings: ProviderOpenings[], maxDays = 5): ProviderOpenings[] {
+  return openings.map((entry) => {
+    const dates = [...new Set(entry.slots.map((slot) => slot.date))].slice(0, maxDays);
+    const allowed = new Set(dates);
+    return { providerId: entry.providerId, slots: entry.slots.filter((slot) => allowed.has(slot.date)) };
+  }).filter((entry) => entry.slots.length > 0);
+}
+
+export function extractAvailableSlots(message: string): ProviderOpenings[] {
+  const tagged = extractSchedulerTaggedJson<unknown>(message, "AVAILABLE_SLOTS");
+  if (!Array.isArray(tagged)) return [];
+  return tagged.filter(isProviderOpenings);
+}
+
+export function stripFormattedSlotBlocks(message: string): string {
+  return message
+    .replace(/\*\*[^*\n]+ \d{4}\*\*\n(?:- \d{2}:\d{2}\n?)*/g, "")
+    .replace(/(?:^|\n)(?:\d{4}-\d{2}-\d{2}[ \t]+\d{2}:\d{2}(?:[ \t]*[\n,;]?[ \t]*)?)+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function extractSuggestedDoctors(message: string): SuggestedDoctor[] {
@@ -300,7 +358,7 @@ export function formatLooseSlotListing(message: string): string {
   }).replace(/\n{3,}/g, "\n\n").trim();
 }
 
-function formatSlotHeading(date: string): string {
+export function formatSlotHeading(date: string): string {
   const [year, month, day] = date.split("-").map(Number);
   const value = new Date(Date.UTC(year, month - 1, day));
   return new Intl.DateTimeFormat("en-GB", {
@@ -312,15 +370,79 @@ function formatSlotHeading(date: string): string {
   }).format(value);
 }
 
+export function messageHasSchedulerAction(message: string): boolean {
+  return Boolean(
+    extractSchedulerTaggedJson(message, "BOOKING_READY")
+    || extractSchedulerTaggedJson(message, "RESCHEDULE_READY"),
+  );
+}
+
+export function proposalFingerprint(proposal: { providerId?: string; date?: string; time?: string } | null | undefined): string | null {
+  if (!proposal?.providerId || !proposal.date || !proposal.time) return null;
+  return `${proposal.providerId}|${proposal.date}|${proposal.time}`;
+}
+
+function proposalFromMessage(message: string): { providerId?: string; date?: string; time?: string } | null {
+  return extractSchedulerTaggedJson(message, "RESCHEDULE_READY")
+    ?? extractSchedulerTaggedJson(message, "BOOKING_READY");
+}
+
+/**
+ * Replace only the assistant turn that matches a completed booking.
+ * Later reschedule/booking payloads must stay intact so their confirm buttons render.
+ */
+export function retireConsumedProposalMessages<T extends { role: string; content: string }>(
+  messages: T[],
+  consumed: { providerId?: string; date?: string; time?: string; summary?: string } | null | undefined,
+): T[] {
+  const fingerprint = proposalFingerprint(consumed);
+  const summary = consumed?.summary?.trim();
+  if (!fingerprint || !summary) return messages;
+  return messages.map((message) => {
+    if (message.role !== "assistant") return message;
+    const proposal = proposalFromMessage(message.content);
+    if (proposalFingerprint(proposal) !== fingerprint) return message;
+    return { ...message, content: summary };
+  });
+}
+
+export function retireSchedulerActionMessages<T extends { role: string; content: string }>(
+  messages: T[],
+  confirmation: string,
+): T[] {
+  return retireConsumedProposalMessages(messages, {
+    ...proposalFromMessage(messages.find((message) => message.role === "assistant" && messageHasSchedulerAction(message.content))?.content ?? ""),
+    summary: confirmation,
+  });
+}
+
+/** True when this exact slot is already on the user's list or was just completed. */
+export function bookingProposalAlreadyCompleted(
+  proposal: { providerId?: string; date?: string; time?: string },
+  scheduled: Array<{ providerId: string; date: string; time: string }>,
+  consumed?: { providerId?: string; date?: string; time?: string } | null,
+): boolean {
+  if (!proposal.providerId || !proposal.date || !proposal.time) return false;
+  if (proposalFingerprint(consumed) === proposalFingerprint(proposal)) return true;
+  return scheduled.some((visit) =>
+    visit.providerId === proposal.providerId && visit.date === proposal.date && visit.time === proposal.time);
+}
+
 export function canonicalizeSchedulerResponse(options: {
   prose: string;
   doctors?: SuggestedDoctor[];
+  slots?: ProviderOpenings[];
   booking?: unknown;
   reschedule?: unknown;
 }): string {
-  const parts = [formatLooseSlotListing(stripSchedulerMetadata(options.prose)).trim()].filter(Boolean);
+  let prose = formatLooseSlotListing(stripSchedulerMetadata(options.prose)).trim();
+  if (options.slots && options.slots.length > 0) prose = stripFormattedSlotBlocks(prose);
+  const parts = [prose].filter(Boolean);
   if (options.doctors && options.doctors.length > 0) {
     parts.push(`SUGGESTED_DOCTORS ${JSON.stringify(options.doctors)}`);
+  }
+  if (options.slots && options.slots.length > 0) {
+    parts.push(`AVAILABLE_SLOTS ${JSON.stringify(options.slots)}`);
   }
   if (options.booking) parts.push(`BOOKING_READY ${JSON.stringify(options.booking)}`);
   if (options.reschedule) parts.push(`RESCHEDULE_READY ${JSON.stringify(options.reschedule)}`);

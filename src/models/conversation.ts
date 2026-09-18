@@ -15,6 +15,14 @@ export interface IConversation extends Document {
     ocr?: string;
   };
   messages: IMessage[];
+  consumedProposal?: {
+    kind: 'booking' | 'reschedule';
+    providerId: string;
+    date: string;
+    time: string;
+    summary: string;
+    consumedAt: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +61,7 @@ const ConversationSchema = new Schema<IConversation>({
     ocr: { type: String },
   },
   messages: [MessageSchema],
+  consumedProposal: { type: Schema.Types.Mixed },
   createdAt: { 
     type: Date, 
     default: Date.now 

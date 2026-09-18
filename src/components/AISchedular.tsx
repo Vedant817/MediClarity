@@ -9,7 +9,21 @@ import { createAppointment, rescheduleAppointment } from '@/actions/appointment'
 import { BookingData, Doctor } from '@/types';
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { extractSchedulerTaggedJson, extractSuggestedDoctors, stripSchedulerMetadata } from '@/lib/scheduler-context';
+import { formatSlotTimeLabel } from '@/lib/appointment-slot';
+import {
+    doctorDisplayName,
+    extractAvailableSlots,
+    extractSchedulerTaggedJson,
+    extractSuggestedDoctors,
+    formatSlotHeading,
+    bookingProposalAlreadyCompleted,
+    retireConsumedProposalMessages,
+    stripSchedulerMetadata,
+    type ProviderOpenings,
+} from '@/lib/scheduler-context';
+
+type ScheduledVisit = { _id?: string; providerId: string; date: string; time: string };
+type ConsumedProposal = { providerId: string; date: string; time: string; summary?: string };
 
 /**
  * Strip streaming artifacts from assistant text before rendering/saving:
@@ -42,6 +56,10 @@ export default function ConversationalScheduler() {
     const [providerCatalog, setProviderCatalog] = useState<Array<{ id: string; name: string; specialty: string }>>([]);
     const abortControllerRef = useRef<AbortController | null>(null);
     const chatContainerRef = useRef<HTMLDivElement | null>(null);
+    const submitGenerationRef = useRef(0);
+    const [availableOpenings, setAvailableOpenings] = useState<ProviderOpenings[]>([]);
+    const [scheduledAppointments, setScheduledAppointments] = useState<ScheduledVisit[]>([]);
+    const [consumedProposal, setConsumedProposal] = useState<ConsumedProposal | null>(null);
 
     useEffect(() => {
         if (chatContainerRef.current) {
@@ -59,14 +77,29 @@ export default function ConversationalScheduler() {
                 const data = await response.json();
 
                 if (data.messages && data.messages.length > 0) {
-                    const formattedMessages = data.messages.map((msg: { timestamp: number; role: 'user' | 'assistant'; content: string }) => ({
-                        id: `${msg.timestamp}-${msg.role}`,
-                        role: msg.role,
-                        content: msg.content
-                    }));
+                    const formattedMessages: { id: string; role: 'user' | 'assistant'; content: string }[] = [];
+                    for (const msg of data.messages as Array<{ timestamp: number; role: 'user' | 'assistant'; content: string }>) {
+                        const formatted = {
+                            id: `${msg.timestamp}-${msg.role}-${formattedMessages.length}`,
+                            role: msg.role,
+                            content: msg.content,
+                        };
+                        const previous = formattedMessages[formattedMessages.length - 1];
+                        if (previous && previous.role === formatted.role && previous.content === formatted.content) continue;
+                        formattedMessages.push(formatted);
+                    }
 
                     setMessages(formattedMessages);
                     setConversationId(data.conversationId || null);
+                    setConsumedProposal(data.consumedProposal ?? null);
+                    setScheduledAppointments(Array.isArray(data.scheduledAppointments)
+                        ? data.scheduledAppointments.map((visit: ScheduledVisit & { _id?: unknown }) => ({
+                            _id: visit._id ? String(visit._id) : undefined,
+                            providerId: visit.providerId,
+                            date: visit.date,
+                            time: visit.time,
+                        }))
+                        : []);
                 }
             } catch (error) {
                 console.error('Failed to load conversation history:', error);
@@ -90,6 +123,7 @@ export default function ConversationalScheduler() {
         const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
         if (!latestAssistant) {
             setSuggestedDoctors([]);
+            setAvailableOpenings([]);
             setBookingData(null);
             setIsBookingReady(false);
             setIsRescheduleReady(false);
@@ -102,22 +136,42 @@ export default function ConversationalScheduler() {
                 provider.id === doctor.id && provider.name === doctor.name && provider.specialty === doctor.specialty))
             .map((doctor) => ({ ...doctor, justification: doctor.justification ?? "" }));
         setSuggestedDoctors(doctors);
+        setAvailableOpenings(
+            extractAvailableSlots(latestAssistant.content).filter((entry) =>
+                providerCatalog.some((provider) => provider.id === entry.providerId) && entry.slots.length > 0),
+        );
 
         const reschedule = extractSchedulerTaggedJson<BookingData>(latestAssistant.content, 'RESCHEDULE_READY');
-        if (reschedule?.appointmentId && reschedule.providerId && reschedule.date && reschedule.time) {
-            const provider = providerCatalog.find((entry) =>
-                entry.id === reschedule.providerId && entry.name === reschedule.providerName) ?? providerCatalog.find((entry) => entry.id === reschedule.providerId);
-            if (!provider) {
+        if (reschedule?.providerId && reschedule.date && reschedule.time) {
+            const matchedVisit = scheduledAppointments.find((visit) => visit._id === reschedule.appointmentId)
+                ?? scheduledAppointments.find((visit) => visit.providerId === reschedule.providerId && visit.date === reschedule.date)
+                ?? scheduledAppointments.find((visit) => visit.date === reschedule.date);
+            const appointmentId = reschedule.appointmentId || matchedVisit?._id;
+            const provider = providerCatalog.find((entry) => entry.id === reschedule.providerId)
+                ?? providerCatalog.find((entry) => entry.id === matchedVisit?.providerId);
+            if (bookingProposalAlreadyCompleted(reschedule, scheduledAppointments, consumedProposal)) {
+                setBookingData(null);
+                setIsBookingReady(false);
+                setIsRescheduleReady(false);
+                setSuggestedDoctors([]);
+                setAvailableOpenings([]);
+                setBookingIssue({
+                    messageId: latestAssistant.id,
+                    content: `This visit is already at ${reschedule.time} on ${reschedule.date}.`,
+                });
+                return () => controller.abort();
+            }
+            if (!appointmentId || !provider) {
                 setBookingData(null);
                 setIsBookingReady(false);
                 setIsRescheduleReady(false);
                 setBookingIssue({
                     messageId: latestAssistant.id,
-                    content: 'I could not validate that reschedule. No appointment was moved. Please ask for another listed time.',
+                    content: 'I could not match that visit. Name the date and a listed time, then try again.',
                 });
                 return () => controller.abort();
             }
-            fetch(`/api/availability?providerId=${encodeURIComponent(provider.id)}&date=${encodeURIComponent(reschedule.date)}&excludeAppointmentId=${encodeURIComponent(reschedule.appointmentId)}`, {
+            fetch(`/api/availability?providerId=${encodeURIComponent(provider.id)}&date=${encodeURIComponent(reschedule.date)}&excludeAppointmentId=${encodeURIComponent(appointmentId)}`, {
                 signal: controller.signal,
                 cache: 'no-store',
             })
@@ -143,7 +197,7 @@ export default function ConversationalScheduler() {
                         });
                         return;
                     }
-                    setBookingData({ ...reschedule, providerName: provider.name, providerId: provider.id });
+                    setBookingData({ ...reschedule, appointmentId, providerName: provider.name, providerId: provider.id });
                     setIsRescheduleReady(true);
                     setIsBookingReady(false);
                     setBookingIssue(null);
@@ -162,6 +216,18 @@ export default function ConversationalScheduler() {
         }
 
         const booking = extractSchedulerTaggedJson<BookingData>(latestAssistant.content, 'BOOKING_READY');
+        if (booking && bookingProposalAlreadyCompleted(booking, scheduledAppointments, consumedProposal)) {
+            setBookingData(null);
+            setIsBookingReady(false);
+            setIsRescheduleReady(false);
+            setSuggestedDoctors([]);
+            setAvailableOpenings([]);
+            setBookingIssue({
+                messageId: latestAssistant.id,
+                content: consumedProposal?.summary || 'This visit is already on your appointment list.',
+            });
+            return () => controller.abort();
+        }
         if (!booking) {
             setBookingData(null);
             setIsBookingReady(false);
@@ -229,7 +295,7 @@ export default function ConversationalScheduler() {
             });
 
         return () => controller.abort();
-    }, [messages, providerCatalog, isLoading]);
+    }, [messages, providerCatalog, isLoading, scheduledAppointments, consumedProposal]);
 
     const clearChat = async () => {
         if (conversationId) {
@@ -244,19 +310,30 @@ export default function ConversationalScheduler() {
         setIsRescheduleReady(false);
         setBookingData(null);
         setBookingIssue(null);
+        submitGenerationRef.current += 1;
+        abortControllerRef.current?.abort();
+        setIsLoading(false);
         setSuggestedDoctors([]);
+        setAvailableOpenings([]);
         setConversationId(null);
+        setConsumedProposal(null);
+        setScheduledAppointments([]);
     };
 
     const handleSubmit = useCallback(async (e: React.FormEvent, programmaticContent?: string) => {
         e.preventDefault();
 
-        const contentToSubmit = programmaticContent || input;
+        const contentToSubmit = (programmaticContent || input).trim();
 
-        if (!user?.id || !contentToSubmit.trim()) return;
+        if (!user?.id || !contentToSubmit) return;
+
+        const generation = ++submitGenerationRef.current;
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
 
         const userMessage = {
-            id: Date.now().toString(),
+            id: `${Date.now()}-${generation}`,
             role: 'user' as const,
             content: contentToSubmit,
         };
@@ -267,13 +344,9 @@ export default function ConversationalScheduler() {
         }
 
         setIsLoading(true);
+        abortControllerRef.current = new AbortController();
 
         try {
-            if (abortControllerRef.current) {
-                abortControllerRef.current.abort();
-            }
-
-            abortControllerRef.current = new AbortController();
 
             const response = await fetch('/api/appointment/scheduler', {
                 method: 'POST',
@@ -303,8 +376,10 @@ export default function ConversationalScheduler() {
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
+            if (generation !== submitGenerationRef.current) return;
+
             let assistantMessage = {
-                id: Date.now().toString(),
+                id: `${Date.now()}-assistant-${generation}`,
                 role: 'assistant' as const,
                 content: '',
             };
@@ -312,6 +387,7 @@ export default function ConversationalScheduler() {
             setMessages(prev => [...prev, assistantMessage]);
 
             while (true) {
+                if (generation !== submitGenerationRef.current) return;
                 const { done, value } = await reader.read();
                 if (done) break;
 
@@ -329,6 +405,7 @@ export default function ConversationalScheduler() {
             }
 
         } catch (error) {
+            if (generation !== submitGenerationRef.current) return;
             if (error instanceof Error && error.name === 'AbortError') {
                 return;
             }
@@ -351,36 +428,83 @@ export default function ConversationalScheduler() {
                 }];
             });
         } finally {
-            setIsLoading(false);
+            if (generation === submitGenerationRef.current) setIsLoading(false);
         }
     }, [user, conversationId, input]);
 
     const stopGeneration = () => {
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            setIsLoading(false);
-        }
+        submitGenerationRef.current += 1;
+        abortControllerRef.current?.abort();
+        setIsLoading(false);
     };
 
     const handleDoctorSelection = (doctorId: string) => {
-        const selectedDoctor = suggestedDoctors.find(d => d.id === doctorId);
-        if (selectedDoctor) {
-            const userMessage = {
-                id: Date.now().toString(),
-                role: 'user' as const,
-                content: `I'd like to schedule an appointment with Dr. ${selectedDoctor.name}.`,
-            };
-            setMessages(prev => [...prev, userMessage]);
-        }
+        if (isLoading) return;
+        const selectedDoctor = suggestedDoctors.find(d => d.id === doctorId)
+            ?? providerCatalog.find((provider) => provider.id === doctorId);
+        if (!selectedDoctor) return;
+        const formEvent = { preventDefault: () => {} } as React.FormEvent;
+        void handleSubmit(formEvent, `I'd like to schedule an appointment with ${doctorDisplayName(selectedDoctor.name)}.`);
     };
 
-    useEffect(() => {
-        const lastMessage = messages[messages.length - 1];
-        if (lastMessage && lastMessage.role === 'user' && lastMessage.content.startsWith("I'd like to schedule an appointment with Dr.")) {
-            const formEvent = { preventDefault: () => {} } as React.FormEvent;
-            handleSubmit(formEvent, lastMessage.content);
+    const handleSlotSelection = (providerId: string, date: string, time: string) => {
+        if (isLoading) return;
+        const provider = providerCatalog.find((entry) => entry.id === providerId)
+            ?? suggestedDoctors.find((doctor) => doctor.id === providerId);
+        if (!provider) return;
+        const formEvent = { preventDefault: () => {} } as React.FormEvent;
+        void handleSubmit(
+            formEvent,
+            `Please book ${date} at ${time} with ${doctorDisplayName(provider.name)}.`,
+        );
+    };
+
+    const persistConsumedProposal = async (
+        kind: 'booking' | 'reschedule',
+        proposal: { providerId?: string; date?: string; time?: string },
+        summary: string,
+    ) => {
+        setMessages((previous) => retireConsumedProposalMessages(previous, {
+            providerId: proposal.providerId,
+            date: proposal.date,
+            time: proposal.time,
+            summary,
+        }));
+        setConsumedProposal({
+            providerId: proposal.providerId ?? '',
+            date: proposal.date ?? '',
+            time: proposal.time ?? '',
+            summary,
+        });
+        setIsBookingReady(false);
+        setIsRescheduleReady(false);
+        setBookingData(null);
+        setSuggestedDoctors([]);
+        setAvailableOpenings([]);
+        if (proposal.providerId && proposal.date && proposal.time) {
+            setScheduledAppointments((previous) => {
+                const withoutSameProvider = previous.filter((visit) => visit.providerId !== proposal.providerId);
+                return [...withoutSameProvider, {
+                    providerId: proposal.providerId!,
+                    date: proposal.date!,
+                    time: proposal.time!,
+                }];
+            });
         }
-    }, [messages, handleSubmit]);
+        if (!conversationId || !proposal.providerId || !proposal.date || !proposal.time) return;
+        await fetch('/api/appointment/scheduler/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                conversationId,
+                kind,
+                providerId: proposal.providerId,
+                date: proposal.date,
+                time: proposal.time,
+                summary,
+            }),
+        }).catch(() => null);
+    };
 
     const handleFinalBooking = async () => {
         if (user && bookingData?.providerId && bookingData.date && bookingData.time && bookingData.reason && bookingData.appointmentType) {
@@ -396,15 +520,10 @@ export default function ConversationalScheduler() {
                 const result = await createAppointment(null, formData);
                 if (result.success) {
                     toast.success("Appointment scheduled successfully!");
-                    setBookingData(null);
-                    setIsBookingReady(false);
+                    const summary = `This appointment is scheduled with ${bookingData.providerName ?? 'the selected provider'} on ${bookingData.date} at ${bookingData.time}.`;
                     const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
-                    if (latestAssistant) {
-                        setBookingIssue({
-                            messageId: latestAssistant.id,
-                            content: `This appointment is scheduled with ${bookingData.providerName ?? 'the selected provider'} on ${bookingData.date} at ${bookingData.time}.`,
-                        });
-                    }
+                    if (latestAssistant) setBookingIssue({ messageId: latestAssistant.id, content: summary });
+                    await persistConsumedProposal('booking', bookingData, summary);
                     router.refresh();
                 } else {
                     toast.error(`Failed to schedule appointment: ${result.error}`);
@@ -425,16 +544,10 @@ export default function ConversationalScheduler() {
             const result = await rescheduleAppointment(bookingData.appointmentId, bookingData.date, bookingData.time);
             if (result.success) {
                 toast.success(result.message ?? 'Appointment rescheduled');
-                setBookingData(null);
-                setIsBookingReady(false);
-                setIsRescheduleReady(false);
+                const summary = `This appointment is rescheduled with ${bookingData.providerName ?? 'the selected provider'} on ${bookingData.date} at ${bookingData.time}.`;
                 const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
-                if (latestAssistant) {
-                    setBookingIssue({
-                        messageId: latestAssistant.id,
-                        content: `This appointment is rescheduled with ${bookingData.providerName ?? 'the selected provider'} on ${bookingData.date} at ${bookingData.time}.`,
-                    });
-                }
+                if (latestAssistant) setBookingIssue({ messageId: latestAssistant.id, content: summary });
+                await persistConsumedProposal('reschedule', bookingData, summary);
                 router.refresh();
             } else {
                 toast.error(result.error ?? 'That slot could not be reserved');
@@ -454,9 +567,9 @@ export default function ConversationalScheduler() {
             </div>
 
             <div ref={chatContainerRef} className="flex-1 p-4 space-y-4 overflow-y-auto bg-gray-50">
-                {messages.filter(m => m.role !== 'system').map((m, i) => (
+                {messages.filter(m => m.role !== 'system').map((m) => (
                     <div
-                        key={i}
+                        key={m.id}
                         className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div
                             className={`w-fit min-w-0 max-w-[80%] break-words p-3 rounded-lg ${m.role === 'user' ? 'bg-blue-500 text-white rounded-br-none' : 'bg-gray-200 text-gray-800 rounded-bl-none overflow-hidden'}`}>
@@ -476,7 +589,7 @@ export default function ConversationalScheduler() {
             </div>
 
             <div className="p-4 border-t bg-white">
-                {suggestedDoctors.length > 0 && !isBookingReady && !isRescheduleReady && (
+                {suggestedDoctors.length > 0 && availableOpenings.length === 0 && !isLoading && !isBookingReady && !isRescheduleReady && (
                     <Card className="mb-4">
                         <CardHeader>
                             <CardTitle>Suggested Doctors</CardTitle>
@@ -484,14 +597,55 @@ export default function ConversationalScheduler() {
                         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {suggestedDoctors.map((doctor: Doctor) => (
                                 <div key={doctor.id} className="p-4 border rounded-lg">
-                                    <h3 className="font-bold">{doctor.name}</h3>
+                                    <h3 className="font-bold">{doctorDisplayName(doctor.name)}</h3>
                                     <p className="text-sm text-gray-600">{doctor.specialty}</p>
-                                    <p className="text-sm mt-2">{doctor.justification}</p>
-                                    <Button onClick={() => handleDoctorSelection(doctor.id)} className="mt-2">
-                                        Select Dr. {doctor.name.split(' ').slice(1).join(' ')}
+                                    {doctor.justification ? <p className="text-sm mt-2">{doctor.justification}</p> : null}
+                                    <Button onClick={() => handleDoctorSelection(doctor.id)} className="mt-2" disabled={isLoading}>
+                                        Select {doctorDisplayName(doctor.name)}
                                     </Button>
                                 </div>
                             ))}
+                        </CardContent>
+                    </Card>
+                )}
+
+                {availableOpenings.length > 0 && !isLoading && !isBookingReady && !isRescheduleReady && (
+                    <Card className="mb-4">
+                        <CardHeader>
+                            <CardTitle>Available times</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-5">
+                            {availableOpenings.map((opening) => {
+                                const provider = providerCatalog.find((entry) => entry.id === opening.providerId);
+                                const byDate = new Map<string, string[]>();
+                                for (const slot of opening.slots) {
+                                    const times = byDate.get(slot.date) ?? [];
+                                    if (!times.includes(slot.time)) times.push(slot.time);
+                                    byDate.set(slot.date, times);
+                                }
+                                return (
+                                    <div key={opening.providerId} className="space-y-3">
+                                        <h3 className="font-semibold">{doctorDisplayName(provider?.name ?? opening.providerId)}</h3>
+                                        {[...byDate.entries()].map(([date, times]) => (
+                                            <div key={date}>
+                                                <p className="mb-2 text-sm font-medium text-slate-700">{formatSlotHeading(date)}</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {times.map((time) => (
+                                                        <Button
+                                                            key={`${date}-${time}`}
+                                                            type="button"
+                                                            variant="outline"
+                                                            onClick={() => handleSlotSelection(opening.providerId, date, time)}
+                                                        >
+                                                            {formatSlotTimeLabel(time)}
+                                                        </Button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })}
                         </CardContent>
                     </Card>
                 )}

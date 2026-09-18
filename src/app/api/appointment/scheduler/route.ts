@@ -10,15 +10,18 @@ import { z } from "zod";
 import { getLLM, invokeWithRetry, isTransientLLMError, llmContentToText } from "@/lib/llm";
 import { getAvailability, getAvailabilityWindow } from "@/lib/availability";
 import { appointmentTypeIds } from "@/lib/data";
-import { clinicClock, upcomingAppointmentDates } from "@/lib/appointment-slot";
+import { clinicClock, formatSlotTimeLabel, upcomingAppointmentDates } from "@/lib/appointment-slot";
 import {
     boundedSchedulerMessages,
     canonicalizeSchedulerResponse,
     compactSchedulerReports,
     extractSchedulerTaggedJson,
     extractSuggestedDoctors,
+    formatSlotHeading,
     formatVerifiedSlotsForPrompt,
     guardUnverifiedBookingClaim,
+    matchProviderFromText,
+    capProviderOpenings,
     replaceRelativeSchedulerDates,
     resolveRelativeBookingDate,
 } from "@/lib/scheduler-context";
@@ -238,23 +241,34 @@ ${formattedSlots || "None"}
                 ...parsedReschedule.data,
                 date: resolveRelativeBookingDate(lastUserText, parsedReschedule.data.date, currentDate),
             };
-            const existing = scheduledAppointments.find((appointment) => String(appointment._id) === proposal.appointmentId);
+            const existing = scheduledAppointments.find((appointment) => String(appointment._id) === proposal.appointmentId)
+                ?? scheduledAppointments.find((appointment) =>
+                    appointment.providerId === proposal.providerId && appointment.date === proposal.date)
+                ?? scheduledAppointments.find((appointment) => appointment.date === proposal.date);
             const provider = providersWithOpenings.find((entry) =>
                 entry.id === proposal.providerId && entry.name === proposal.providerName)
-                ?? availableProviders.find((entry) => entry.id === proposal.providerId && entry.name === proposal.providerName);
-            if (existing && provider && slotIsOpen(proposal.providerId, proposal.date, proposal.time, proposal.appointmentId)) {
-                const live = await getAvailability(proposal.providerId, proposal.date, {
-                    excludeAppointmentId: proposal.appointmentId,
+                ?? availableProviders.find((entry) => entry.id === proposal.providerId)
+                ?? availableProviders.find((entry) => entry.id === existing?.providerId);
+            const appointmentId = existing ? String(existing._id) : proposal.appointmentId;
+            const providerId = provider?.id ?? proposal.providerId;
+            if (existing && provider && slotIsOpen(providerId, proposal.date, proposal.time, appointmentId)) {
+                const live = await getAvailability(providerId, proposal.date, {
+                    excludeAppointmentId: appointmentId,
                 });
                 const open = live[proposal.date]?.timeSlots.some((slot) => slot.time === proposal.time && slot.available);
-                if (open || (existing.providerId === proposal.providerId && existing.date === proposal.date && existing.time === proposal.time)) {
-                    validatedReschedule = proposal;
-                    prose = "Your reschedule details are ready. Select Reschedule Appointment below to complete the change.";
+                if (open || (existing.providerId === providerId && existing.date === proposal.date && existing.time === proposal.time)) {
+                    validatedReschedule = {
+                        ...proposal,
+                        appointmentId,
+                        providerId,
+                        providerName: provider.name,
+                    };
+                    prose = `Reschedule ${provider.name} to ${formatSlotHeading(proposal.date)} at ${formatSlotTimeLabel(proposal.time)}. Select Reschedule Appointment below to complete the change.`;
                 } else {
-                    prose = "That time is already booked or no longer available. Your appointment has not been moved; please choose another listed slot.";
+                    prose = `That time is already booked or ${provider.name} does not have a ${formatSlotTimeLabel(proposal.time)} opening on ${formatSlotHeading(proposal.date)}. Your appointment has not been moved.`;
                 }
             } else {
-                prose = "I could not validate that reschedule. The requested slot may already be booked. Your appointment has not been moved; please choose another listed time.";
+                prose = "I could not match that visit to a free slot. Your appointment has not been moved; please name the date and a listed time.";
             }
         } else if (rescheduleCandidate) {
             prose = "I could not validate the reschedule details. Your appointment has not been moved; please confirm the visit, date, and time again.";
@@ -281,9 +295,19 @@ ${formattedSlots || "None"}
             }
         }
 
+        const latestUserText = [...conversation.messages].reverse().find((message: IMessage) => message.role === "user")?.content ?? "";
+        const selectedProvider = matchProviderFromText(latestUserText, providersWithOpenings);
+        const slotSource = selectedProvider
+            ? openAvailability.filter((entry) => entry.providerId === selectedProvider.id)
+            : suggestedDoctors.length === 1
+                ? openAvailability.filter((entry) => entry.providerId === suggestedDoctors[0].id)
+                : [];
+        const slotsForUi = validatedBooking || validatedReschedule ? [] : capProviderOpenings(slotSource);
+
         fullResponse = canonicalizeSchedulerResponse({
             prose,
             doctors: suggestedDoctors,
+            slots: slotsForUi,
             booking: validatedBooking,
             reschedule: validatedReschedule,
         });
@@ -294,6 +318,10 @@ ${formattedSlots || "None"}
             content: fullResponse,
             timestamp: new Date()
         });
+        if (validatedBooking || validatedReschedule) {
+            conversation.consumedProposal = undefined;
+            conversation.markModified("consumedProposal");
+        }
         await conversation.save();
 
         return new Response(fullResponse, {
