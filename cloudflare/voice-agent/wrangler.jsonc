@@ -6,8 +6,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "ai": { "binding": "AI" },
   "vars": {
-    "NEXT_ORIGIN": "http://localhost:3000",
-    "ALLOWED_ORIGIN": "http://localhost:3000",
+    "NEXT_ORIGIN": "https://my-mediclarity.vercel.app",
+    "ALLOWED_ORIGIN": "https://my-mediclarity.vercel.app",
     "TOKEN_AUDIENCE": "mediclarity-voice-worker"
   },
   "durable_objects": {
