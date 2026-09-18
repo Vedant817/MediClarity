@@ -54,6 +54,16 @@ function list(value: unknown, limit: number): unknown[] {
   return Array.isArray(value) ? value.slice(0, limit) : [];
 }
 
+function reportFindings(value: unknown): string | undefined {
+  const summary = text(value, 4000);
+  if (!summary) return undefined;
+  const questionSection = /\b(?:questions?\s+(?:to\s+ask|for)\s+(?:your\s+)?(?:doctor|physician|clinician)|appropriate\s+questions?\s+for\s+(?:a\s+)?clinician)\b/iu;
+  const marker = summary.search(questionSection);
+  if (marker < 0) return summary;
+  const findings = summary.slice(0, marker).replace(/(?:\d+[.)]|[-–—:])?\s*$/u, "").trim();
+  return findings || undefined;
+}
+
 export function normalizePatientContext(value: unknown): PatientContext {
   const root = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const activeMedications = list(root.activeMedications, 25).flatMap((entry) => {
@@ -87,7 +97,7 @@ export function normalizePatientContext(value: unknown): PatientContext {
   });
   const recentReports = list(root.recentReports, 12).flatMap((entry) => {
     const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
-    const summary = text(item.summary, 4000);
+    const summary = reportFindings(item.summary);
     return summary ? [{ reportDate: text(item.reportDate, 40), sourceLab: text(item.sourceLab, 160), summary }] : [];
   });
   const upcomingAppointments = list(root.upcomingAppointments, 20).flatMap((entry) => {
