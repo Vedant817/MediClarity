@@ -34,7 +34,7 @@ describe("multilingual speech safety", () => {
         onFatalError: reject,
       });
       session.feed(new Int16Array(3_200).fill(12_000).buffer);
-      session.feed(new Int16Array(9_600).buffer);
+      session.feed(new Int16Array(12_000).buffer);
     });
 
     await expect(transcript).resolves.toBe("मेरा हीमोग्लोबिन कितना है?");
@@ -64,7 +64,7 @@ describe("multilingual speech safety", () => {
       onFatalError: fatal,
     });
     session.feed(new Int16Array(3_200).fill(12_000).buffer);
-    session.feed(new Int16Array(9_600).buffer);
+    session.feed(new Int16Array(12_000).buffer);
     await new Promise((resolve) => setTimeout(resolve, 40));
     expect(fatal).not.toHaveBeenCalled();
     expect(uttered).not.toHaveBeenCalled();

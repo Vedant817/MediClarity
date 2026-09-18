@@ -105,6 +105,7 @@ export class PatientVoiceAgent extends VoiceAgent {
       const workersAI = createWorkersAI({ binding: this.env.AI });
       const wasInterrupted = this.interrupted;
       this.interrupted = false;
+      const turnSignal = AbortSignal.any([context.signal, AbortSignal.timeout(20_000)]);
       const result = streamText({
         model: workersAI("@cf/meta/llama-3.1-8b-instruct-fp8-fast"),
         system: buildClinicalSystemPrompt(patientContext, this.voiceLocale(), wasInterrupted),
@@ -117,10 +118,14 @@ export class PatientVoiceAgent extends VoiceAgent {
         ],
         maxOutputTokens: 300,
         temperature: 0.2,
-        abortSignal: context.signal,
+        abortSignal: turnSignal,
       });
-      return result.textStream;
+      const text = (await result.text).trim();
+      if (context.signal.aborted) return "";
+      if (!text) return "I didn't catch a complete answer. Please ask that again.";
+      return text;
     } catch {
+      if (context.signal.aborted) return "";
       console.error("voice.turn_failed");
       return "I had trouble answering just then. Please say that again.";
     }

@@ -8,7 +8,7 @@ import { pcm16Rms } from "./transcript-filter";
 
 const SAMPLE_RATE = 16_000;
 const MIN_SPEECH_MS = 180;
-const END_SILENCE_MS = 560;
+const END_SILENCE_MS = 640;
 const MAX_UTTERANCE_MS = 25_000;
 const PRE_ROLL_MS = 180;
 
@@ -99,7 +99,7 @@ class WorkersAIWhisperSession implements TranscriberSession {
     const copy = chunk.slice(0);
     const durationMs = (copy.byteLength / 2 / SAMPLE_RATE) * 1_000;
     const rms = pcm16Rms(copy);
-    const speechThreshold = Math.max(0.014, Math.min(0.05, this.noiseFloor * 2.8));
+    const speechThreshold = Math.max(0.01, Math.min(0.035, this.noiseFloor * 2.4));
 
     if (!this.speaking) {
       this.noiseFloor = Math.max(0.002, Math.min(0.025, this.noiseFloor * 0.96 + rms * 0.04));

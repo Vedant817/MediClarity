@@ -120,6 +120,9 @@ export default function PatientVoiceAgent() {
   const isMutedRef = useRef(false);
   const mutedForTtsRef = useRef(false);
   const toggleMuteRef = useRef<() => void>(() => undefined);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const ttsWatchdogRef = useRef<number | null>(null);
+  const speakingPollRef = useRef<number | null>(null);
 
   const loadSession = useCallback(async (locale: VoiceLocale, startAfterConnect = false) => {
     setIsLoadingSession(true);
@@ -197,12 +200,24 @@ export default function PatientVoiceAgent() {
   isMutedRef.current = isMuted;
   toggleMuteRef.current = toggleMute;
 
+  const clearTtsTimers = useCallback(() => {
+    if (ttsWatchdogRef.current !== null) {
+      window.clearTimeout(ttsWatchdogRef.current);
+      ttsWatchdogRef.current = null;
+    }
+    if (speakingPollRef.current !== null) {
+      window.clearInterval(speakingPollRef.current);
+      speakingPollRef.current = null;
+    }
+  }, []);
+
   const releaseTtsMute = useCallback(() => {
+    clearTtsTimers();
     setBrowserSpeaking(false);
     if (!mutedForTtsRef.current) return;
     mutedForTtsRef.current = false;
     if (isMutedRef.current) toggleMuteRef.current();
-  }, []);
+  }, [clearTtsTimers]);
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -266,7 +281,11 @@ export default function PatientVoiceAgent() {
       setLocalError("This device does not provide speech output. You can continue using the visible transcript and typed input.");
       return;
     }
-    const utterance = new SpeechSynthesisUtterance(message.text.slice(0, 3_500));
+    const spoken = message.text.slice(0, 3_500);
+    window.speechSynthesis.cancel();
+    clearTtsTimers();
+    const utterance = new SpeechSynthesisUtterance(spoken);
+    utteranceRef.current = utterance;
     utterance.lang = selectedLocale;
     utterance.rate = 1.02;
     const language = selectedLocale.toLowerCase().split("-")[0];
@@ -277,15 +296,24 @@ export default function PatientVoiceAgent() {
     ) ?? null;
     utterance.onstart = () => {
       setBrowserSpeaking(true);
-      if (!isMutedRef.current) {
+      if (!mutedForTtsRef.current && !isMutedRef.current) {
         mutedForTtsRef.current = true;
         toggleMuteRef.current();
       }
+      if (speakingPollRef.current !== null) window.clearInterval(speakingPollRef.current);
+      speakingPollRef.current = window.setInterval(() => {
+        if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) releaseTtsMute();
+      }, 400);
     };
     utterance.onend = () => releaseTtsMute();
     utterance.onerror = () => releaseTtsMute();
     window.speechSynthesis.speak(utterance);
-  }, [lastCustomMessage, releaseTtsMute, selectedLocale]);
+    const holdMs = Math.min(12_000, Math.max(3_500, spoken.length * 65));
+    ttsWatchdogRef.current = window.setTimeout(() => {
+      window.speechSynthesis.cancel();
+      releaseTtsMute();
+    }, holdMs);
+  }, [clearTtsTimers, lastCustomMessage, releaseTtsMute, selectedLocale]);
 
   useEffect(() => {
     if (!browserSpeaking || mutedForTtsRef.current || isMuted) {
@@ -304,8 +332,9 @@ export default function PatientVoiceAgent() {
   }, [audioLevel, browserSpeaking, isMuted, noiseMode, releaseTtsMute, sendJSON]);
 
   useEffect(() => () => {
+    clearTtsTimers();
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-  }, []);
+  }, [clearTtsTimers]);
 
   const beginCall = async () => {
     setLocalError(null);
