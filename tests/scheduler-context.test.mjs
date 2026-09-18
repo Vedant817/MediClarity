@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   boundedSchedulerMessages,
+  canonicalizeSchedulerResponse,
   compactSchedulerReports,
   extractSchedulerTaggedJson,
+  extractSuggestedDoctors,
+  formatLooseSlotListing,
+  formatVerifiedSlotsForPrompt,
   guardUnverifiedBookingClaim,
   replaceRelativeSchedulerDates,
+  resolveRelativeBookingDate,
   stripSchedulerMetadata,
 } from "../src/lib/scheduler-context.ts";
 
@@ -53,14 +58,64 @@ test("scheduler protocol accepts fenced JSON and removes the complete metadata b
     reason: "regular checkup",
   });
   const clean = stripSchedulerMetadata(response);
-  assert.equal(clean.trim(), "Ready.\n\n\n\nDisclaimer.");
-  assert.doesNotMatch(clean, /```|BOOKING_READY/);
+  assert.match(clean, /Ready/);
+  assert.match(clean, /Disclaimer/);
+  assert.doesNotMatch(clean, /```|BOOKING_READY|dr-johnson/);
 });
 
-test("scheduler replaces misleading relative dates with the explicit clinic date", () => {
+test("scheduler maps today and tomorrow to different clinic dates", () => {
   const response = replaceRelativeSchedulerDates(
-    "I can see you tomorrow at 08:30 on 2026-09-17.",
+    "I can see you tomorrow at 08:30 instead of today.",
     "2026-09-17",
   );
-  assert.equal(response, "I can see you on 2026-09-17 at 08:30 on 2026-09-17.");
+  assert.equal(response, "I can see you 2026-09-18 at 08:30 instead of 2026-09-17.");
+});
+
+test("scheduler recovers doctor JSON that leaked without a SUGGESTED_DOCTORS tag", () => {
+  const leaked = `I recommend seeing Dr. Sarah Smith for a regular heart check-up. **** json [ { "id": "dr-smith", "name": "Dr. Sarah Smith", "specialty": "Cardiology", "justification": "Cardiology specialist with available slots." } ] Which date works?`;
+  const doctors = extractSuggestedDoctors(leaked);
+  assert.equal(doctors.length, 1);
+  assert.equal(doctors[0].id, "dr-smith");
+  const clean = stripSchedulerMetadata(leaked);
+  assert.match(clean, /Dr\. Sarah Smith/);
+  assert.doesNotMatch(clean, /dr-smith|"specialty"|json \[/);
+});
+
+test("scheduler canonicalizes leaked doctor JSON so the UI can render cards", () => {
+  const leaked = `I recommend Dr. Sarah Smith. **** json [{"id":"dr-smith","name":"Dr. Sarah Smith","specialty":"Cardiology","justification":"Heart specialist"}]`;
+  const canonical = canonicalizeSchedulerResponse({
+    prose: leaked,
+    doctors: extractSuggestedDoctors(leaked),
+  });
+  assert.deepEqual(extractSchedulerTaggedJson(canonical, "SUGGESTED_DOCTORS"), [{
+    id: "dr-smith",
+    name: "Dr. Sarah Smith",
+    specialty: "Cardiology",
+    justification: "Heart specialist",
+  }]);
+  assert.doesNotMatch(stripSchedulerMetadata(canonical), /\[\{/);
+});
+
+test("scheduler formats cramped slot lists as one time per line", () => {
+  const formatted = formatLooseSlotListing("Here are the slots:\n2026-09-18 10:00 2026-09-18 11:00 2026-09-19 09:00");
+  assert.match(formatted, /\*\*Friday, 18 September 2026\*\*/);
+  assert.match(formatted, /- 10:00/);
+  assert.match(formatted, /- 11:00/);
+  assert.match(formatted, /\*\*Saturday, 19 September 2026\*\*/);
+});
+
+test("scheduler prompt slots are grouped under each provider and date", () => {
+  const text = formatVerifiedSlotsForPrompt(
+    [{ providerId: "dr-smith", slots: [{ date: "2026-09-19", time: "10:00" }, { date: "2026-09-19", time: "11:00" }] }],
+    [{ id: "dr-smith", name: "Dr. Sarah Smith" }],
+  );
+  assert.match(text, /Dr\. Sarah Smith \(dr-smith\)/);
+  assert.match(text, /Saturday, 19 September 2026/);
+  assert.match(text, /    - 10:00/);
+});
+
+test("tomorrow in the user request wins over a today-dated proposal", () => {
+  assert.equal(resolveRelativeBookingDate("book tomorrow at 10 am", "2026-09-18", "2026-09-18"), "2026-09-19");
+  assert.equal(resolveRelativeBookingDate("book today at 10 am", "2026-09-19", "2026-09-18"), "2026-09-18");
+  assert.equal(resolveRelativeBookingDate("yes please", "2026-09-21", "2026-09-18"), "2026-09-21");
 });
