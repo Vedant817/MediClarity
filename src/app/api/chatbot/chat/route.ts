@@ -3,41 +3,30 @@ import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import { getLLM, llmContentToText } from "@/lib/llm";
-import { DIAGNOSIS_REFUSAL, isDiagnosisSeeking } from "@/lib/chat-safety";
+import { DIAGNOSIS_REFUSAL } from "@/lib/chat-safety";
+import {
+  classifyRecordChat,
+  compactChatHistory,
+  EMERGENCY_REPLY,
+  OUT_OF_SCOPE_REPLY,
+  RECORD_CHAT_DISCLAIMER,
+  systemPromptFor,
+} from "@/lib/record-chat";
 import {
   buildReportCatalog,
   formatScopedRecordContext,
-  parseRecordQuestion,
   selectReports,
 } from "@/lib/record-retrieval";
 import LabResult from "@/models/labResult";
 import Medication from "@/models/medication";
 import Report from "@/models/report";
-import Conversation, { IMessage } from "@/models/conversation";
+import Conversation from "@/models/conversation";
 import Appointment from "@/models/appointment";
 
 export const runtime = "nodejs";
 
 const conversationKind = "records-chat";
-const disclaimer = "For information only, not medical advice. A qualified clinician should interpret these results in your full clinical context.";
-const systemPrompt = `You are a health information assistant, not a doctor.
-Answer patient-specific questions only from MEDICAL-RECORD CONTEXT. The REPORT CATALOG lists every uploaded report. SELECTED REPORT DETAIL is the only place values may come from for this turn.
-FIRST-EVER is the oldest report. MOST RECENT / last report is the newest. LAST TWO are the two newest. Never call an older report "the last report".
-Cite the label and ISO date with every value (example: "In your MOST RECENT report (2026-09-10), hemoglobin was 13.2 g/dL").
-If the fact is not in SELECTED REPORT DETAIL or LAB HISTORY, say exactly: "Not in report - ask your doctor".
-If the user asks whether they have a condition (including "do I have X" or "yes or no"), always give exactly that refusal — describing lab values is allowed, naming a condition the patient has is forbidden, even when related findings exist.
-Never diagnose, prescribe, recommend changing treatment, invent findings, or copy a number from the wrong report.
-Explain terms in simple language and distinguish general education from facts present in the records.
-Format responses cleanly using standard Markdown (prefer structured bullet lists or clean markdown tables; do not output raw HTML tags).
-End every response with this exact disclaimer: "${disclaimer}"`;
-
-function toLangChainHistory(messages: IMessage[]) {
-  return messages.slice(-20).map((message) =>
-    message.role === "assistant"
-      ? new AIMessage(message.content)
-      : new HumanMessage(message.content),
-  );
-}
+const disclaimer = RECORD_CHAT_DISCLAIMER;
 
 export async function POST(req: Request) {
   try {
@@ -72,13 +61,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Message is too long" }, { status: 400 });
     }
 
-    // Deterministic safety gate: condition questions ("do I have X") bypass
-    // the model entirely with the exact refusal. Rich record context can
-    // make the LLM confident enough to override soft prompt instructions,
-    // so this must not depend on the model. The exchange is still persisted.
-    if (isDiagnosisSeeking(userMessage)) {
+    const route = classifyRecordChat(userMessage);
+    const persist = async (reply: string) => {
       const timestamp = new Date();
-      const reply = `${DIAGNOSIS_REFUSAL}\n\n${disclaimer}`;
       await Conversation.updateOne(
         { _id: conversation._id, userId },
         {
@@ -94,24 +79,34 @@ export async function POST(req: Request) {
         },
       );
       return NextResponse.json({ reply, conversationId: conversation._id });
-    }
+    };
+
+    if (route.kind === "emergency") return persist(EMERGENCY_REPLY);
+    if (route.kind === "diagnosis") return persist(`${DIAGNOSIS_REFUSAL}\n\n${disclaimer}`);
+    if (route.kind === "out_of_scope") return persist(OUT_OF_SCOPE_REPLY);
 
     const today = new Date().toISOString().split("T")[0];
-    const intent = parseRecordQuestion(userMessage);
+    const intent = route.recordIntent;
     const [reportIndex, medications, upcomingAppointments] = await Promise.all([
-      Report.find({ userId })
-        .select({ reportDate: 1, createdAt: 1, sourceLab: 1 })
-        .lean<Array<{ _id: { toString(): string }; reportDate?: Date; createdAt?: Date; sourceLab?: string }>>(),
-      Medication.find({ userId, status: "active" })
-        .select({ name: 1, dose: 1, frequency: 1 })
-        .sort({ createdAt: -1 })
-        .limit(20)
-        .lean(),
-      Appointment.find({ patientId: userId, status: "scheduled", date: { $gte: today } })
-        .select({ providerId: 1, date: 1, time: 1, reason: 1 })
-        .sort({ date: 1 })
-        .limit(5)
-        .lean(),
+      route.attachReports
+        ? Report.find({ userId })
+          .select({ reportDate: 1, createdAt: 1, sourceLab: 1 })
+          .lean<Array<{ _id: { toString(): string }; reportDate?: Date; createdAt?: Date; sourceLab?: string }>>()
+        : Promise.resolve([]),
+      route.attachMeds
+        ? Medication.find({ userId, status: "active" })
+          .select({ name: 1, dose: 1, frequency: 1 })
+          .sort({ createdAt: -1 })
+          .limit(20)
+          .lean()
+        : Promise.resolve([]),
+      route.attachAppointments
+        ? Appointment.find({ patientId: userId, status: "scheduled", date: { $gte: today } })
+          .select({ providerId: 1, date: 1, time: 1, reason: 1 })
+          .sort({ date: 1 })
+          .limit(5)
+          .lean()
+        : Promise.resolve([]),
     ]);
     const catalog = buildReportCatalog(reportIndex.map((report) => ({
       id: String(report._id),
@@ -126,17 +121,17 @@ export async function POST(req: Request) {
       selectedIds.length
         ? Report.find({ userId, _id: { $in: selectedIds } }).select({ summary: 1 }).lean<Array<{ _id: { toString(): string }; summary?: string }>>()
         : Promise.resolve([]),
-      LabResult.find(
-        intent.includeLabHistory
-          ? { userId }
-          : selectedIds.length
-            ? { userId, reportId: { $in: selectedIds } }
-            : { userId: "__none__" },
-      )
-        .select({ reportId: 1, canonicalName: 1, test: 1, value: 1, unit: 1, flag: 1, date: 1 })
-        .sort({ date: -1 })
-        .limit(intent.includeLabHistory ? 80 : 40)
-        .lean(),
+      route.attachLabs && (intent.includeLabHistory || selectedIds.length)
+        ? LabResult.find(
+          intent.includeLabHistory
+            ? { userId }
+            : { userId, reportId: { $in: selectedIds } },
+        )
+          .select({ reportId: 1, canonicalName: 1, test: 1, value: 1, unit: 1, flag: 1, date: 1 })
+          .sort({ date: -1 })
+          .limit(intent.includeLabHistory ? 80 : 40)
+          .lean()
+        : Promise.resolve([]),
     ]);
     const summaryById = new Map(selectedDocs.map((report) => [String(report._id), report.summary ?? ""]));
     const labsByReport = new Map<string, typeof labHistory>();
@@ -185,12 +180,16 @@ export async function POST(req: Request) {
     });
 
     const model = getLLM("chat");
+    const history = compactChatHistory(conversation.messages).map((message) =>
+      message.role === "assistant" ? new AIMessage(message.content) : new HumanMessage(message.content),
+    );
+    const payload = route.kind === "general_education"
+      ? `GENERAL QUESTION (do not use patient labs):\n${userMessage.trim()}`
+      : `TURN TYPE: ${route.kind}\n\nMEDICAL-RECORD CONTEXT:\n${recordContext}\n\nUSER QUESTION:\n${userMessage.trim()}`;
     const result = await model.invoke([
-      new SystemMessage(systemPrompt),
-      ...toLangChainHistory(conversation.messages),
-      new HumanMessage(
-        `MEDICAL-RECORD CONTEXT:\n${recordContext}\n\nUSER QUESTION:\n${userMessage.trim()}`,
-      ),
+      new SystemMessage(systemPromptFor(route.kind)),
+      ...history,
+      new HumanMessage(payload),
     ]);
     let reply = llmContentToText(result.content).trim();
     if (!reply) {
@@ -199,24 +198,7 @@ export async function POST(req: Request) {
     if (!reply.includes(disclaimer)) {
       reply = `${reply}\n\n${disclaimer}`;
     }
-
-    const timestamp = new Date();
-    await Conversation.updateOne(
-      { _id: conversation._id, userId },
-      {
-        $push: {
-          messages: {
-            $each: [
-              { role: "user", content: userMessage.trim(), timestamp },
-              { role: "assistant", content: reply, timestamp },
-            ],
-          },
-        },
-        $set: { updatedAt: timestamp },
-      }
-    );
-
-    return NextResponse.json({ reply, conversationId: conversation._id });
+    return persist(reply);
   } catch (error) {
     console.error("Chat API error:", error);
     return NextResponse.json(
