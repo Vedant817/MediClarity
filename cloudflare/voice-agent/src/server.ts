@@ -4,9 +4,15 @@ import { agentInstanceName, connectionTokenFromRequest, verifyConnectionToken } 
 import { fetchPatientContext, type PatientContext } from "./patient-context";
 import { buildClinicalSystemPrompt } from "./prompt";
 import { cleanVoiceTranscript } from "./transcript-filter";
-import { greetingFor, isVoiceLocale, type VoiceLocale } from "./languages";
-import { generateVoiceAnswer } from "./workers-ai-llm";
-import { WorkersAIWhisperTranscriber } from "./workers-ai-stt";
+import { confirmationFor, greetingFor, isVoiceLocale, repeatFor, type VoiceLocale } from "./languages";
+import { generateVoiceAnswer, repairSpokenTranscript } from "./workers-ai-llm";
+import {
+  buildMedicalKeyterms,
+  buildMedicalTranscriptionPrompt,
+  parseVoiceConfirmation,
+  parseVoiceRepeat,
+  WorkersAIHybridTranscriber,
+} from "./workers-ai-stt";
 
 interface AgentProps extends Record<string, unknown> {
   userId: string;
@@ -25,6 +31,7 @@ const VoiceAgent = withVoice(PatientAgentBase, { historyLimit: 24, maxMessageCou
 export class PatientVoiceAgent extends VoiceAgent {
   private patientContext: PatientContext | null = null;
   private interrupted = false;
+  private pendingHeardConfirmation: string | null = null;
 
   onStart(): void {
     this.sql`CREATE TABLE IF NOT EXISTS patient_session_context (
@@ -69,7 +76,14 @@ export class PatientVoiceAgent extends VoiceAgent {
   }
 
   createTranscriber(_connection: Connection) {
-    return new WorkersAIWhisperTranscriber(this.env.AI, this.voiceLocale());
+    const locale = this.voiceLocale();
+    const context = this.loadPatientContext() ?? undefined;
+    return new WorkersAIHybridTranscriber(
+      this.env.AI,
+      locale,
+      buildMedicalTranscriptionPrompt(locale, context),
+      buildMedicalKeyterms(context),
+    );
   }
 
   async beforeCallStart(_connection: Connection): Promise<boolean> {
@@ -81,8 +95,16 @@ export class PatientVoiceAgent extends VoiceAgent {
     await this.speak(connection, greetingFor(this.voiceLocale(), name));
   }
 
-  afterTranscribe(transcript: string): string | null {
-    return cleanVoiceTranscript(transcript);
+  async afterTranscribe(transcript: string, connection: Connection): Promise<string | null> {
+    if (parseVoiceRepeat(transcript)) {
+      this.pendingHeardConfirmation = null;
+      await this.speak(connection, repeatFor(this.voiceLocale()));
+      return null;
+    }
+    const confirmation = parseVoiceConfirmation(transcript);
+    const cleaned = cleanVoiceTranscript(confirmation ?? transcript);
+    this.pendingHeardConfirmation = confirmation && cleaned ? cleaned : null;
+    return cleaned;
   }
 
   beforeSynthesize(text: string, connection: Connection): null {
@@ -90,7 +112,7 @@ export class PatientVoiceAgent extends VoiceAgent {
       type: "browser_tts",
       id: crypto.randomUUID(),
       locale: this.voiceLocale(),
-      text: text.slice(0, 3_500),
+      text: text.slice(0, 6_000),
     }));
     return null;
   }
@@ -103,7 +125,16 @@ export class PatientVoiceAgent extends VoiceAgent {
     try {
       const wasInterrupted = this.interrupted;
       this.interrupted = false;
-      const turnSignal = AbortSignal.any([context.signal, AbortSignal.timeout(20_000)]);
+      const heard = this.pendingHeardConfirmation;
+      this.pendingHeardConfirmation = null;
+      if (heard) return confirmationFor(this.voiceLocale(), heard);
+      const turnSignal = AbortSignal.any([context.signal, AbortSignal.timeout(30_000)]);
+      const repaired = await repairSpokenTranscript(
+        this.env.AI,
+        transcript,
+        buildMedicalKeyterms(patientContext),
+        turnSignal,
+      );
       const text = await generateVoiceAnswer(
         this.env.AI,
         buildClinicalSystemPrompt(patientContext, this.voiceLocale(), wasInterrupted),
@@ -111,7 +142,9 @@ export class PatientVoiceAgent extends VoiceAgent {
           role: message.role as "user" | "assistant",
           content: message.content,
         })),
-        transcript,
+        repaired === transcript
+          ? transcript
+          : `Speech-to-text heard: ${transcript}\nInterpreted request: ${repaired}`,
         turnSignal,
       );
       if (context.signal.aborted) return "";
@@ -132,6 +165,7 @@ export class PatientVoiceAgent extends VoiceAgent {
 
   onCallEnd(_connection: Connection): void {
     this.interrupted = false;
+    this.pendingHeardConfirmation = null;
     console.info("voice.call_ended");
   }
 }
