@@ -1,12 +1,11 @@
 import { Agent, getAgentByName, routeAgentRequest, type Connection } from "agents";
 import { withVoice, type VoiceTurnContext } from "@cloudflare/voice";
-import { streamText } from "ai";
-import { createWorkersAI } from "workers-ai-provider";
 import { agentInstanceName, connectionTokenFromRequest, verifyConnectionToken } from "./auth";
 import { fetchPatientContext, type PatientContext } from "./patient-context";
 import { buildClinicalSystemPrompt } from "./prompt";
 import { cleanVoiceTranscript } from "./transcript-filter";
 import { greetingFor, isVoiceLocale, type VoiceLocale } from "./languages";
+import { generateVoiceAnswer } from "./workers-ai-llm";
 import { WorkersAIWhisperTranscriber } from "./workers-ai-stt";
 
 interface AgentProps extends Record<string, unknown> {
@@ -102,25 +101,19 @@ export class PatientVoiceAgent extends VoiceAgent {
       return "I can't securely load your record right now. Please try again later. If this is urgent, contact local emergency services.";
     }
     try {
-      const workersAI = createWorkersAI({ binding: this.env.AI });
       const wasInterrupted = this.interrupted;
       this.interrupted = false;
       const turnSignal = AbortSignal.any([context.signal, AbortSignal.timeout(20_000)]);
-      const result = streamText({
-        model: workersAI("@cf/meta/llama-3.1-8b-instruct-fp8-fast"),
-        system: buildClinicalSystemPrompt(patientContext, this.voiceLocale(), wasInterrupted),
-        messages: [
-          ...context.messages.map((message) => ({
-            role: message.role as "user" | "assistant",
-            content: message.content,
-          })),
-          { role: "user" as const, content: transcript },
-        ],
-        maxOutputTokens: 300,
-        temperature: 0.2,
-        abortSignal: turnSignal,
-      });
-      const text = (await result.text).trim();
+      const text = await generateVoiceAnswer(
+        this.env.AI,
+        buildClinicalSystemPrompt(patientContext, this.voiceLocale(), wasInterrupted),
+        context.messages.map((message) => ({
+          role: message.role as "user" | "assistant",
+          content: message.content,
+        })),
+        transcript,
+        turnSignal,
+      );
       if (context.signal.aborted) return "";
       if (!text) return "I didn't catch a complete answer. Please ask that again.";
       return text;
