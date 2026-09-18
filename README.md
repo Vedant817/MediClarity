@@ -26,7 +26,7 @@ Plan gates match `src/config/product.ts` and `src/lib/entitlements.ts`. Free acc
 
 | Capability | Where | Notes |
 | --- | --- | --- |
-| Voice assistant | `/dashboard/voice` | Talk through the record in 10 Indian languages. Next.js issues a short-lived capability; the Cloudflare Worker runs STT → Llama → device TTS with barge-in |
+| Voice assistant | `/dashboard/voice` | Talk through the record in 10 Indian languages. Next.js issues a short-lived capability; the Cloudflare Worker runs hybrid STT (Nova-3 for English and Hindi, Whisper otherwise) → Llama → device TTS with barge-in |
 | Medications | `/dashboard/meds` | Pro/Lab. Extracted from reports plus manual entries; OpenFDA label scan for pharmacist-review combination flags |
 | Care direction | `/dashboard/triage` | Pro/Lab. Symptom list → urgency, timeframe, specialist, red flags. Not a diagnosis |
 | Appointments | `/dashboard/appointments` | Real slots from the Provider collection, reminders, attended outcomes on the timeline, AI scheduler chat |
