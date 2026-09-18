@@ -1,10 +1,19 @@
 import mongoose from "mongoose";
 import connectDB from "@/lib/db";
 import {
+  addIsoDays,
   assertCanonicalAppointmentDate,
   isAppointmentSlotPast,
   normalizeAppointmentTime,
 } from "@/lib/appointment-slot";
+import {
+  clinicDayLabels,
+  configuredSlotsOnDate,
+  firstOpenDate,
+  hasUploadedClinicSchedule,
+  normalizeClinicSchedule,
+  type ClinicDay,
+} from "@/lib/clinic-hours";
 import Appointment from "@/models/appointment";
 import Provider from "@/models/provider";
 
@@ -46,6 +55,17 @@ function bookedQuery(providerId: string, dateFilter: Record<string, unknown>, ex
   return query;
 }
 
+async function loadProviderSchedule(providerId: string): Promise<{ schedule: ClinicDay[]; usedDefaultHours: boolean }> {
+  const provider = await Provider.findOne({ id: providerId })
+    .select({ weeklyAvailability: 1 })
+    .lean<{ weeklyAvailability?: Array<{ weekday: number; slots: string[] }> }>();
+  if (!provider) throw new Error("Provider not found");
+  return {
+    schedule: normalizeClinicSchedule(provider.weeklyAvailability),
+    usedDefaultHours: !hasUploadedClinicSchedule(provider.weeklyAvailability),
+  };
+}
+
 export async function getAvailability(
   providerId: string,
   date: string,
@@ -53,12 +73,8 @@ export async function getAvailability(
 ): Promise<ProviderAvailability> {
   assertCanonicalAppointmentDate(date);
   await connectDB();
-  const provider = await Provider.findOne({ id: providerId, acceptingNewPatients: true })
-    .select({ weeklyAvailability: 1 })
-    .lean<{ weeklyAvailability?: Array<{ weekday: number; slots: string[] }> }>();
-  if (!provider) throw new Error("Provider not found or not accepting appointments");
-  const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
-  const configuredSlots = provider.weeklyAvailability?.find((entry) => entry.weekday === weekday)?.slots ?? [];
+  const { schedule } = await loadProviderSchedule(providerId);
+  const configuredSlots = configuredSlotsOnDate(schedule, date);
   const bookedAppointments = await Appointment.find(
     bookedQuery(providerId, { date }, options.excludeAppointmentId),
   )
@@ -82,10 +98,7 @@ export async function getAvailabilityWindow(
   if (dates.length === 0) return {};
   dates.forEach(assertCanonicalAppointmentDate);
   await connectDB();
-  const provider = await Provider.findOne({ id: providerId, acceptingNewPatients: true })
-    .select({ weeklyAvailability: 1 })
-    .lean<{ weeklyAvailability?: Array<{ weekday: number; slots: string[] }> }>();
-  if (!provider) throw new Error("Provider not found or not accepting appointments");
+  const { schedule } = await loadProviderSchedule(providerId);
   const bookedAppointments = await Appointment.find(
     bookedQuery(providerId, { date: { $in: dates } }, options.excludeAppointmentId),
   )
@@ -96,10 +109,51 @@ export async function getAvailabilityWindow(
     bookedByDate.set(appointment.date, [...(bookedByDate.get(appointment.date) ?? []), appointment.time]);
   }
   return Object.fromEntries(dates.map((date) => {
-    const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
-    const configuredSlots = provider.weeklyAvailability?.find((entry) => entry.weekday === weekday)?.slots ?? [];
+    const configuredSlots = configuredSlotsOnDate(schedule, date);
     return [date, availabilityForBookedTimes(configuredSlots, bookedByDate.get(date) ?? [], date, options.now)];
   }));
+}
+
+export async function getAvailabilityForDate(
+  providerId: string,
+  date: string,
+  options: AvailabilityOptions & { seek?: boolean } = {},
+) {
+  assertCanonicalAppointmentDate(date);
+  await connectDB();
+  const { schedule, usedDefaultHours } = await loadProviderSchedule(providerId);
+  const horizon = Array.from({ length: 14 }, (_, offset) => addIsoDays(date, offset));
+  const dates = options.seek ? horizon : [date];
+  const bookedAppointments = await Appointment.find(
+    bookedQuery(providerId, { date: { $in: dates } }, options.excludeAppointmentId),
+  )
+    .select({ date: 1, time: 1, _id: 0 })
+    .lean<Array<{ date: string; time: string }>>();
+  const bookedByDate = new Map<string, string[]>();
+  for (const appointment of bookedAppointments) {
+    bookedByDate.set(appointment.date, [...(bookedByDate.get(appointment.date) ?? []), appointment.time]);
+  }
+
+  const resolvedDate = options.seek
+    ? firstOpenDate(schedule, date, bookedByDate, 14, options.now) ?? date
+    : date;
+  const configuredSlots = configuredSlotsOnDate(schedule, resolvedDate);
+  const availability = {
+    [resolvedDate]: availabilityForBookedTimes(
+      configuredSlots,
+      bookedByDate.get(resolvedDate) ?? [],
+      resolvedDate,
+      options.now,
+    ),
+  };
+
+  return {
+    date: resolvedDate,
+    requestedDate: date,
+    clinicDays: clinicDayLabels(schedule),
+    usedDefaultHours,
+    availability,
+  };
 }
 
 export async function getMonthAvailability(
@@ -111,10 +165,7 @@ export async function getMonthAvailability(
     throw new Error("A valid year and month are required");
   }
   await connectDB();
-  const provider = await Provider.findOne({ id: providerId, acceptingNewPatients: true })
-    .select({ weeklyAvailability: 1 })
-    .lean<{ weeklyAvailability?: Array<{ weekday: number; slots: string[] }> }>();
-  if (!provider) throw new Error("Provider not found or not accepting appointments");
+  const { schedule } = await loadProviderSchedule(providerId);
   const prefix = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}`;
   const next = new Date(Date.UTC(year, month, 1));
   const nextMonth = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-01`;
@@ -135,8 +186,7 @@ export async function getMonthAvailability(
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   for (let day = 1; day <= daysInMonth; day += 1) {
     const date = `${prefix}-${String(day).padStart(2, "0")}`;
-    const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
-    const configuredSlots = provider.weeklyAvailability?.find((entry) => entry.weekday === weekday)?.slots ?? [];
+    const configuredSlots = configuredSlotsOnDate(schedule, date);
     result[date] = availabilityForBookedTimes(configuredSlots, bookedByDate.get(date) ?? [], date);
   }
   return result;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isCanonicalAppointmentDate } from "@/lib/appointment-slot";
-import { getAvailability } from "@/lib/availability";
+import { getAvailabilityForDate } from "@/lib/availability";
 import { auth } from "@clerk/nextjs/server";
 import Appointment from "@/models/appointment";
 
@@ -23,19 +23,29 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: "Date must be a valid YYYY-MM-DD date" }, { status: 400 });
         }
         const excludeAppointmentId = searchParams.get("excludeAppointmentId")?.trim() || undefined;
-        const availability = await getAvailability(providerId, date, { excludeAppointmentId });
-        const availableTimes = availability[date].timeSlots
+        const seek = searchParams.get("seek") === "1";
+        const result = await getAvailabilityForDate(providerId, date, { excludeAppointmentId, seek });
+        const resolvedDate = result.date;
+        const availableTimes = result.availability[resolvedDate].timeSlots
             .filter((slot) => slot.available)
             .map((slot) => slot.time);
         const ownedQuery: Record<string, unknown> = {
             patientId: userId,
             providerId,
-            date,
+            date: resolvedDate,
             status: 'scheduled',
         };
         if (excludeAppointmentId) ownedQuery._id = { $ne: excludeAppointmentId };
         const ownedScheduledTimes = await Appointment.find(ownedQuery).distinct('time');
-        return NextResponse.json({ availableTimes, ownedScheduledTimes, availability });
+        return NextResponse.json({
+            availableTimes,
+            ownedScheduledTimes,
+            availability: result.availability,
+            date: resolvedDate,
+            requestedDate: date,
+            clinicDays: result.clinicDays,
+            usedDefaultHours: result.usedDefaultHours,
+        });
 
     } catch (error) {
         console.error("Failed to fetch availability:", error);

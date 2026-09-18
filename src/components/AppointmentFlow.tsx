@@ -41,12 +41,19 @@ export default function EnhancedAppointmentFlow({ providers }: { providers: Prov
         const controller = new AbortController();
         setAvailabilityLoading(true);
         setSelectedTime('');
-        fetch(`/api/availability?providerId=${encodeURIComponent(selectedProvider)}&date=${selectedDate}`, { signal: controller.signal })
+        fetch(`/api/availability?providerId=${encodeURIComponent(selectedProvider)}&date=${selectedDate}&seek=1`, { signal: controller.signal })
             .then(async (response) => {
                 if (!response.ok) throw new Error('Availability could not be loaded');
-                return response.json() as Promise<{ availability: Record<string, { timeSlots: Array<{ time: string; label: string; available: boolean }> }> }>;
+                return response.json() as Promise<{
+                    date?: string;
+                    availability: Record<string, { timeSlots: Array<{ time: string; label: string; available: boolean }> }>;
+                }>;
             })
-            .then((data) => setAvailableTimes((data.availability[selectedDate]?.timeSlots ?? []).filter((slot) => slot.available).map((slot) => ({ value: slot.time, label: slot.label }))))
+            .then((data) => {
+                const resolvedDate = data.date && data.date !== selectedDate ? data.date : selectedDate;
+                if (data.date && data.date !== selectedDate) setSelectedDate(data.date);
+                setAvailableTimes((data.availability[resolvedDate]?.timeSlots ?? []).filter((slot) => slot.available).map((slot) => ({ value: slot.time, label: slot.label })));
+            })
             .catch((error: Error) => {
                 if (error.name !== 'AbortError') {
                     setAvailableTimes([]);

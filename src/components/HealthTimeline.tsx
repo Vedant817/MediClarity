@@ -84,6 +84,8 @@ export default function HealthTimeline() {
     const [rescheduleTimes, setRescheduleTimes] = useState<Array<{ value: string; label: string }>>([]);
     const [rescheduleLoading, setRescheduleLoading] = useState(false);
     const [rescheduleSaving, setRescheduleSaving] = useState(false);
+    const [rescheduleClinicDays, setRescheduleClinicDays] = useState('');
+    const [rescheduleHint, setRescheduleHint] = useState('');
 
     const fetchAppointments = async () => {
         setLoading(true);
@@ -144,13 +146,29 @@ export default function HealthTimeline() {
         const controller = new AbortController();
         setRescheduleLoading(true);
         setRescheduleTime('');
-        fetch(`/api/availability?providerId=${encodeURIComponent(rescheduleEvent.providerId)}&date=${encodeURIComponent(rescheduleDate)}&excludeAppointmentId=${encodeURIComponent(rescheduleEvent.id)}`, { signal: controller.signal, cache: 'no-store' })
+        fetch(`/api/availability?providerId=${encodeURIComponent(rescheduleEvent.providerId)}&date=${encodeURIComponent(rescheduleDate)}&excludeAppointmentId=${encodeURIComponent(rescheduleEvent.id)}&seek=1`, { signal: controller.signal, cache: 'no-store' })
             .then(async (response) => {
                 if (!response.ok) throw new Error('Availability could not be loaded');
-                return response.json() as Promise<{ availability: Record<string, { timeSlots: Array<{ time: string; label: string; available: boolean }> }> }>;
+                return response.json() as Promise<{
+                    date?: string;
+                    requestedDate?: string;
+                    clinicDays?: string;
+                    usedDefaultHours?: boolean;
+                    availability: Record<string, { timeSlots: Array<{ time: string; label: string; available: boolean }> }>;
+                }>;
             })
             .then((data) => {
-                setRescheduleTimes((data.availability[rescheduleDate]?.timeSlots ?? [])
+                const resolvedDate = data.date && data.date !== rescheduleDate ? data.date : rescheduleDate;
+                if (data.date && data.date !== rescheduleDate) setRescheduleDate(data.date);
+                setRescheduleClinicDays(data.clinicDays ?? '');
+                setRescheduleHint(
+                    data.date && data.requestedDate && data.date !== data.requestedDate
+                        ? `No remaining times on ${data.requestedDate}. Showing the next clinic day.`
+                        : data.usedDefaultHours
+                            ? 'This provider has no uploaded hours, so weekday clinic defaults are shown.'
+                            : '',
+                );
+                setRescheduleTimes((data.availability[resolvedDate]?.timeSlots ?? [])
                     .filter((slot) => slot.available)
                     .map((slot) => ({ value: slot.time, label: slot.label })));
             })
@@ -165,9 +183,12 @@ export default function HealthTimeline() {
     }, [rescheduleDate, rescheduleEvent]);
 
     const openReschedule = (event: TimelineEvent) => {
+        setRescheduleHint('');
+        setRescheduleClinicDays('');
+        setRescheduleTimes([]);
         setRescheduleEvent(event);
-        setRescheduleDate(event.date);
-        setRescheduleTime(event.time ?? '');
+        setRescheduleDate(event.date < appointmentDateInTimeZone() ? appointmentDateInTimeZone() : event.date);
+        setRescheduleTime('');
     };
 
     const handleReschedule = async () => {
@@ -346,6 +367,9 @@ export default function HealthTimeline() {
                                 value={rescheduleDate}
                                 onChange={(event) => setRescheduleDate(event.target.value)}
                             />
+                            {rescheduleClinicDays ? (
+                                <p className="mt-1 text-xs text-slate-500">Clinic days: {rescheduleClinicDays}</p>
+                            ) : null}
                         </div>
                         <div>
                             <label className="mb-1 block text-sm font-medium" htmlFor="reschedule-time">Available time</label>
@@ -356,11 +380,12 @@ export default function HealthTimeline() {
                                 onChange={(event) => setRescheduleTime(event.target.value)}
                                 disabled={!rescheduleDate || rescheduleLoading}
                             >
-                                <option value="">{rescheduleLoading ? 'Loading availability…' : rescheduleTimes.length ? 'Select a time' : 'No open slots'}</option>
+                                <option value="">{rescheduleLoading ? 'Loading availability…' : rescheduleTimes.length ? 'Select a time' : 'No open slots on this date'}</option>
                                 {rescheduleTimes.map((slot) => (
                                     <option key={slot.value} value={slot.value}>{slot.label}</option>
                                 ))}
                             </select>
+                            {rescheduleHint ? <p className="mt-1 text-xs text-amber-800">{rescheduleHint}</p> : null}
                         </div>
                     </div>
                     <DialogFooter>
