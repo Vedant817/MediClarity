@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { toast } from 'sonner';
 import { appointmentTypes } from '@/lib/data';
+import { appointmentDateInTimeZone } from '@/lib/appointment-slot';
 import { createAppointment } from '@/actions/appointment';
 import { useAppointmentStore } from '@/store/appointment';
 
@@ -95,7 +96,7 @@ export default function EnhancedAppointmentFlow({ providers }: { providers: Prov
                             className="w-full border rounded p-2"
                             value={selectedDate}
                             onChange={(e) => setSelectedDate(e.target.value)}
-                            min={new Date().toISOString().split('T')[0]}
+                            min={appointmentDateInTimeZone()}
                         />
                     </div>
                     <div>

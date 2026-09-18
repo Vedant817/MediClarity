@@ -14,10 +14,48 @@ export function appointmentDateInTimeZone(
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
+export function clinicTimeZone(): string {
+  return process.env.APPOINTMENT_TIME_ZONE?.trim() || "Asia/Kolkata";
+}
+
+export function appointmentTimeInTimeZone(
+  value: Date = new Date(),
+  timeZone = clinicTimeZone(),
+): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value ?? "00";
+  return `${part("hour")}:${part("minute")}`;
+}
+
+export function clinicClock(
+  value: Date = new Date(),
+  timeZone = clinicTimeZone(),
+): { timeZone: string; date: string; time: string; tomorrow: string } {
+  const date = appointmentDateInTimeZone(value, timeZone);
+  return {
+    timeZone,
+    date,
+    time: appointmentTimeInTimeZone(value, timeZone),
+    tomorrow: addIsoDays(date, 1),
+  };
+}
+
+export function addIsoDays(isoDate: string, days: number): string {
+  assertCanonicalAppointmentDate(isoDate);
+  const [year, month, day] = isoDate.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
+}
+
 export function upcomingAppointmentDates(
   count: number,
   value: Date = new Date(),
-  timeZone = process.env.APPOINTMENT_TIME_ZONE?.trim() || "Asia/Kolkata",
+  timeZone = clinicTimeZone(),
 ): string[] {
   const firstDate = appointmentDateInTimeZone(value, timeZone);
   const [year, month, day] = firstDate.split("-").map(Number);
@@ -25,6 +63,20 @@ export function upcomingAppointmentDates(
     const date = new Date(Date.UTC(year, month - 1, day + offset));
     return date.toISOString().slice(0, 10);
   });
+}
+
+/** True when the clinic-local slot has already started or passed. */
+export function isAppointmentSlotPast(
+  date: string,
+  time: string,
+  value: Date = new Date(),
+  timeZone = clinicTimeZone(),
+): boolean {
+  const clock = clinicClock(value, timeZone);
+  const normalized = normalizeAppointmentTime(time);
+  if (date < clock.date) return true;
+  if (date > clock.date) return false;
+  return normalized <= clock.time;
 }
 
 export function isCanonicalAppointmentDate(value: string): boolean {

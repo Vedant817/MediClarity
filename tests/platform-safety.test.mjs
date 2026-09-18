@@ -4,6 +4,8 @@ import { File } from "node:buffer";
 import {
   appointmentDateInTimeZone,
   appointmentTimeVariants,
+  clinicClock,
+  isAppointmentSlotPast,
   isCanonicalAppointmentDate,
   normalizeAppointmentTime,
   upcomingAppointmentDates,
@@ -34,6 +36,18 @@ test("appointment dates use the configured clinic timezone at UTC boundaries", (
     "2026-09-18",
     "2026-09-19",
   ]);
+  const clock = clinicClock(instant, "Asia/Kolkata");
+  assert.equal(clock.date, "2026-09-17");
+  assert.equal(clock.tomorrow, "2026-09-18");
+  assert.equal(clock.time, "02:00");
+});
+
+test("past clinic-local slots are not offered", () => {
+  const now = new Date("2026-09-18T11:15:00.000Z"); // 16:45 IST
+  assert.equal(isAppointmentSlotPast("2026-09-18", "10:00", now, "Asia/Kolkata"), true);
+  assert.equal(isAppointmentSlotPast("2026-09-18", "16:00", now, "Asia/Kolkata"), true);
+  assert.equal(isAppointmentSlotPast("2026-09-18", "17:00", now, "Asia/Kolkata"), false);
+  assert.equal(isAppointmentSlotPast("2026-09-19", "10:00", now, "Asia/Kolkata"), false);
 });
 
 test("emergency symptom pairs override a falsely reassuring model response", () => {
