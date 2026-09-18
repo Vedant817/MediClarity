@@ -12,7 +12,7 @@ export async function GET() {
 
     try {
         await connectDB();
-        const report = await Report.findOne({ userId }).sort({ createdAt: -1 });
+        const report = await Report.findOne({ userId }).sort({ reportDate: -1, createdAt: -1 });
 
         if (!report) {
             return NextResponse.json({ error: "No report found" }, { status: 404 });

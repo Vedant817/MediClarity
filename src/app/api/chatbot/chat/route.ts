@@ -4,7 +4,12 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import { getLLM, llmContentToText } from "@/lib/llm";
 import { DIAGNOSIS_REFUSAL, isDiagnosisSeeking } from "@/lib/chat-safety";
-import { buildRecordContext } from "@/lib/records-context";
+import {
+  buildReportCatalog,
+  formatScopedRecordContext,
+  parseRecordQuestion,
+  selectReports,
+} from "@/lib/record-retrieval";
 import LabResult from "@/models/labResult";
 import Medication from "@/models/medication";
 import Report from "@/models/report";
@@ -16,11 +21,12 @@ export const runtime = "nodejs";
 const conversationKind = "records-chat";
 const disclaimer = "For information only, not medical advice. A qualified clinician should interpret these results in your full clinical context.";
 const systemPrompt = `You are a health information assistant, not a doctor.
-Answer patient-specific questions only from the medical-record context supplied with the message. That context spans the current report AND the patient's earlier reports, abnormal labs, and medications: use all of it.
-When you answer from an earlier report, say which one (e.g. "In your June CBC…").
-If the requested information is absent from the whole record, say exactly: "Not in report - ask your doctor".
+Answer patient-specific questions only from MEDICAL-RECORD CONTEXT. The REPORT CATALOG lists every uploaded report. SELECTED REPORT DETAIL is the only place values may come from for this turn.
+FIRST-EVER is the oldest report. MOST RECENT / last report is the newest. LAST TWO are the two newest. Never call an older report "the last report".
+Cite the label and ISO date with every value (example: "In your MOST RECENT report (2026-09-10), hemoglobin was 13.2 g/dL").
+If the fact is not in SELECTED REPORT DETAIL or LAB HISTORY, say exactly: "Not in report - ask your doctor".
 If the user asks whether they have a condition (including "do I have X" or "yes or no"), always give exactly that refusal — describing lab values is allowed, naming a condition the patient has is forbidden, even when related findings exist.
-Never diagnose, prescribe, recommend changing treatment, or invent findings.
+Never diagnose, prescribe, recommend changing treatment, invent findings, or copy a number from the wrong report.
 Explain terms in simple language and distinguish general education from facts present in the records.
 Format responses cleanly using standard Markdown (prefer structured bullet lists or clean markdown tables; do not output raw HTML tags).
 End every response with this exact disclaimer: "${disclaimer}"`;
@@ -90,22 +96,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ reply, conversationId: conversation._id });
     }
 
-    const summary = conversation.context?.summary?.trim();
-    const ocr = conversation.context?.ocr?.trim();
     const today = new Date().toISOString().split("T")[0];
-    // Full-record context: the session's current report plus earlier
-    // reports, abnormal labs, active medications, and upcoming visits.
-    const [pastReports, abnormalLabs, medications, upcomingAppointments] = await Promise.all([
+    const intent = parseRecordQuestion(userMessage);
+    const [reportIndex, medications, upcomingAppointments] = await Promise.all([
       Report.find({ userId })
-        .select({ summary: 1, reportDate: 1, createdAt: 1 })
-        .sort({ reportDate: -1, createdAt: -1 })
-        .limit(5)
-        .lean(),
-      LabResult.find({ userId, flag: { $in: ["high", "low"] } })
-        .select({ canonicalName: 1, test: 1, value: 1, unit: 1, flag: 1, date: 1 })
-        .sort({ date: -1 })
-        .limit(15)
-        .lean(),
+        .select({ reportDate: 1, createdAt: 1, sourceLab: 1 })
+        .lean<Array<{ _id: { toString(): string }; reportDate?: Date; createdAt?: Date; sourceLab?: string }>>(),
       Medication.find({ userId, status: "active" })
         .select({ name: 1, dose: 1, frequency: 1 })
         .sort({ createdAt: -1 })
@@ -117,33 +113,54 @@ export async function POST(req: Request) {
         .limit(5)
         .lean(),
     ]);
-    const currentSummary = (summary ?? "").trim();
-    // Skip one copy of the session's current report in history: it already
-    // ships at full detail above. Only the first exact match is dropped so
-    // templated duplicates still contribute their dates.
-    let skippedCurrent = false;
-    const historyReports = pastReports.filter((report) => {
-      if (!skippedCurrent && currentSummary && (report.summary ?? "").trim() === currentSummary) {
-        skippedCurrent = true;
-        return false;
-      }
-      return true;
-    });
-    const recordContext = buildRecordContext({
-      currentSummary: summary,
-      currentOcr: ocr,
-      pastReports: historyReports.map((report) => ({
-        date: report.reportDate ?? report.createdAt,
-        summary: report.summary,
+    const catalog = buildReportCatalog(reportIndex.map((report) => ({
+      id: String(report._id),
+      date: "",
+      sourceLab: report.sourceLab,
+      reportDate: report.reportDate,
+      createdAt: report.createdAt,
+    })));
+    const selectedMeta = selectReports(catalog, intent);
+    const selectedIds = selectedMeta.map((report) => report.id);
+    const [selectedDocs, labHistory] = await Promise.all([
+      selectedIds.length
+        ? Report.find({ userId, _id: { $in: selectedIds } }).select({ summary: 1 }).lean<Array<{ _id: { toString(): string }; summary?: string }>>()
+        : Promise.resolve([]),
+      LabResult.find(
+        intent.includeLabHistory
+          ? { userId }
+          : selectedIds.length
+            ? { userId, reportId: { $in: selectedIds } }
+            : { userId: "__none__" },
+      )
+        .select({ reportId: 1, canonicalName: 1, test: 1, value: 1, unit: 1, flag: 1, date: 1 })
+        .sort({ date: -1 })
+        .limit(intent.includeLabHistory ? 80 : 40)
+        .lean(),
+    ]);
+    const summaryById = new Map(selectedDocs.map((report) => [String(report._id), report.summary ?? ""]));
+    const labsByReport = new Map<string, typeof labHistory>();
+    for (const lab of labHistory) {
+      const reportId = String(lab.reportId ?? "");
+      if (!reportId) continue;
+      const list = labsByReport.get(reportId) ?? [];
+      list.push(lab);
+      labsByReport.set(reportId, list);
+    }
+    const recordContext = formatScopedRecordContext({
+      catalog,
+      selected: selectedMeta.map((report) => ({
+        ...report,
+        summary: summaryById.get(report.id) ?? "",
+        labs: (labsByReport.get(report.id) ?? []).map((lab) => ({
+          canonicalName: lab.canonicalName,
+          test: lab.test,
+          value: lab.value,
+          unit: lab.unit,
+          flag: lab.flag,
+        })),
       })),
-      abnormalLabs: abnormalLabs.map((lab) => ({
-        canonicalName: lab.canonicalName,
-        test: lab.test,
-        value: lab.value,
-        unit: lab.unit,
-        flag: lab.flag,
-        date: lab.date,
-      })),
+      intent,
       medications: medications.map((medication) => ({
         name: medication.name,
         dose: medication.dose,
@@ -155,6 +172,16 @@ export async function POST(req: Request) {
         time: appointment.time,
         reason: appointment.reason,
       })),
+      labHistory: intent.includeLabHistory
+        ? labHistory.map((lab) => ({
+          canonicalName: lab.canonicalName,
+          test: lab.test,
+          value: lab.value,
+          unit: lab.unit,
+          flag: lab.flag,
+          date: lab.date,
+        }))
+        : undefined,
     });
 
     const model = getLLM("chat");
