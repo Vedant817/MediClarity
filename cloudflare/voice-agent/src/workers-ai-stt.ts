@@ -12,6 +12,10 @@ const END_SILENCE_MS = 560;
 const MAX_UTTERANCE_MS = 25_000;
 const PRE_ROLL_MS = 180;
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === "AbortError" || /aborted|AbortError/i.test(error.message));
+}
+
 function concatenate(chunks: ArrayBuffer[]): Uint8Array {
   const output = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.byteLength, 0));
   let offset = 0;
@@ -142,10 +146,13 @@ class WorkersAIWhisperSession implements TranscriberSession {
     const audio = concatenate(chunks);
     this.pending = this.pending.then(async () => {
       if (this.closed) return;
-      const transcript = await transcribe(this.ai, this.locale, audio, this.abortController.signal);
-      if (!this.closed && transcript) this.options.onUtterance?.(transcript);
-    }).catch((error: unknown) => {
-      if (!this.closed) this.options.onFatalError?.(error instanceof Error ? error : new Error("speech recognition failed"));
+      try {
+        const transcript = await transcribe(this.ai, this.locale, audio, this.abortController.signal);
+        if (!this.closed && transcript) this.options.onUtterance?.(transcript);
+      } catch (error: unknown) {
+        if (this.closed || isAbortError(error)) return;
+        console.error("voice.transcribe_failed");
+      }
     });
   }
 }

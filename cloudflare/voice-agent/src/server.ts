@@ -101,24 +101,29 @@ export class PatientVoiceAgent extends VoiceAgent {
     if (!patientContext) {
       return "I can't securely load your record right now. Please try again later. If this is urgent, contact local emergency services.";
     }
-    const workersAI = createWorkersAI({ binding: this.env.AI });
-    const wasInterrupted = this.interrupted;
-    this.interrupted = false;
-    const result = streamText({
-      model: workersAI("@cf/meta/llama-3.1-8b-instruct-fp8-fast"),
-      system: buildClinicalSystemPrompt(patientContext, this.voiceLocale(), wasInterrupted),
-      messages: [
-        ...context.messages.map((message) => ({
-          role: message.role as "user" | "assistant",
-          content: message.content,
-        })),
-        { role: "user" as const, content: transcript },
-      ],
-      maxOutputTokens: 300,
-      temperature: 0.2,
-      abortSignal: context.signal,
-    });
-    return result.textStream;
+    try {
+      const workersAI = createWorkersAI({ binding: this.env.AI });
+      const wasInterrupted = this.interrupted;
+      this.interrupted = false;
+      const result = streamText({
+        model: workersAI("@cf/meta/llama-3.1-8b-instruct-fp8-fast"),
+        system: buildClinicalSystemPrompt(patientContext, this.voiceLocale(), wasInterrupted),
+        messages: [
+          ...context.messages.map((message) => ({
+            role: message.role as "user" | "assistant",
+            content: message.content,
+          })),
+          { role: "user" as const, content: transcript },
+        ],
+        maxOutputTokens: 300,
+        temperature: 0.2,
+        abortSignal: context.signal,
+      });
+      return result.textStream;
+    } catch {
+      console.error("voice.turn_failed");
+      return "I had trouble answering just then. Please say that again.";
+    }
   }
 
   onInterrupt(_connection: Connection): void {
@@ -128,9 +133,7 @@ export class PatientVoiceAgent extends VoiceAgent {
   }
 
   onCallEnd(_connection: Connection): void {
-    this.patientContext = null;
     this.interrupted = false;
-    this.sql`DELETE FROM patient_session_context WHERE singleton = 1`;
     console.info("voice.call_ended");
   }
 }

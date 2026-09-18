@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { greetingFor, isVoiceLocale, whisperLanguage } from "../src/languages";
 import { cleanVoiceTranscript, pcm16Rms } from "../src/transcript-filter";
 import { pcm16ToWav, WorkersAIWhisperTranscriber } from "../src/workers-ai-stt";
@@ -49,6 +49,26 @@ describe("multilingual speech safety", () => {
     expect(cleanVoiceTranscript(" um... ")).toBeNull();
     expect(cleanVoiceTranscript("no")).toBe("no");
     expect(cleanVoiceTranscript("हाँ")).toBe("हाँ");
+  });
+
+  it("keeps the call alive when a transcription attempt fails", async () => {
+    const fatal = vi.fn();
+    const uttered = vi.fn();
+    const ai = {
+      run: async () => {
+        throw new Error("Binding AI needs to be run remotely");
+      },
+    } as unknown as Ai;
+    const session = new WorkersAIWhisperTranscriber(ai, "en-IN").createSession({
+      onUtterance: uttered,
+      onFatalError: fatal,
+    });
+    session.feed(new Int16Array(3_200).fill(12_000).buffer);
+    session.feed(new Int16Array(9_600).buffer);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(fatal).not.toHaveBeenCalled();
+    expect(uttered).not.toHaveBeenCalled();
+    session.close();
   });
 
   it("measures PCM energy for adaptive voice activity detection", () => {

@@ -117,6 +117,9 @@ export default function PatientVoiceAgent() {
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const spokenMessageIdsRef = useRef(new Set<string>());
   const browserInterruptChunksRef = useRef(0);
+  const isMutedRef = useRef(false);
+  const mutedForTtsRef = useRef(false);
+  const toggleMuteRef = useRef<() => void>(() => undefined);
 
   const loadSession = useCallback(async (locale: VoiceLocale, startAfterConnect = false) => {
     setIsLoadingSession(true);
@@ -181,15 +184,25 @@ export default function PatientVoiceAgent() {
     host: session?.host,
     query: session ? { token: session.token } : undefined,
     enabled: Boolean(session),
-    silenceThreshold: noiseMode === "noisy" ? 0.065 : 0.035,
-    silenceDurationMs: noiseMode === "noisy" ? 700 : 560,
-    interruptThreshold: noiseMode === "noisy" ? 0.085 : 0.045,
-    interruptChunks: noiseMode === "noisy" ? 4 : 3,
+    silenceThreshold: noiseMode === "noisy" ? 0.08 : 0.05,
+    silenceDurationMs: noiseMode === "noisy" ? 900 : 700,
+    interruptThreshold: noiseMode === "noisy" ? 0.18 : 0.14,
+    interruptChunks: noiseMode === "noisy" ? 8 : 6,
     onReconnect: () => {
       setReconnectNotice(true);
       window.setTimeout(() => setReconnectNotice(false), 3500);
     },
   });
+
+  isMutedRef.current = isMuted;
+  toggleMuteRef.current = toggleMute;
+
+  const releaseTtsMute = useCallback(() => {
+    setBrowserSpeaking(false);
+    if (!mutedForTtsRef.current) return;
+    mutedForTtsRef.current = false;
+    if (isMutedRef.current) toggleMuteRef.current();
+  }, []);
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -262,27 +275,33 @@ export default function PatientVoiceAgent() {
     ) ?? window.speechSynthesis.getVoices().find((voice) =>
       voice.lang.toLowerCase().split("-")[0] === language,
     ) ?? null;
-    utterance.onstart = () => setBrowserSpeaking(true);
-    utterance.onend = () => setBrowserSpeaking(false);
-    utterance.onerror = () => setBrowserSpeaking(false);
+    utterance.onstart = () => {
+      setBrowserSpeaking(true);
+      if (!isMutedRef.current) {
+        mutedForTtsRef.current = true;
+        toggleMuteRef.current();
+      }
+    };
+    utterance.onend = () => releaseTtsMute();
+    utterance.onerror = () => releaseTtsMute();
     window.speechSynthesis.speak(utterance);
-  }, [lastCustomMessage, selectedLocale]);
+  }, [lastCustomMessage, releaseTtsMute, selectedLocale]);
 
   useEffect(() => {
-    if (!browserSpeaking) {
+    if (!browserSpeaking || mutedForTtsRef.current || isMuted) {
       browserInterruptChunksRef.current = 0;
       return;
     }
-    const threshold = noiseMode === "noisy" ? 0.085 : 0.045;
+    const threshold = noiseMode === "noisy" ? 0.2 : 0.16;
     browserInterruptChunksRef.current = audioLevel > threshold
       ? browserInterruptChunksRef.current + 1
       : 0;
-    if (browserInterruptChunksRef.current < (noiseMode === "noisy" ? 4 : 3)) return;
+    if (browserInterruptChunksRef.current < (noiseMode === "noisy" ? 8 : 6)) return;
     browserInterruptChunksRef.current = 0;
     window.speechSynthesis.cancel();
-    setBrowserSpeaking(false);
+    releaseTtsMute();
     sendJSON({ type: "interrupt" });
-  }, [audioLevel, browserSpeaking, noiseMode, sendJSON]);
+  }, [audioLevel, browserSpeaking, isMuted, noiseMode, releaseTtsMute, sendJSON]);
 
   useEffect(() => () => {
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
@@ -309,7 +328,7 @@ export default function PatientVoiceAgent() {
 
   const finishCall = () => {
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-    setBrowserSpeaking(false);
+    releaseTtsMute();
     endCall();
     setSession(null);
     setStartRequested(false);
