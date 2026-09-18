@@ -12,25 +12,35 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
+/blob-report/
 
 # next.js
 /.next/
 /out/
+.turbo
 
 # production
 /build
 
 # misc
 .DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 *.pem
+*.swp
+*~
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
 
-# env files (can opt-in for committing if needed)
+# env files — copy from .env.example (and cloudflare/voice-agent/.dev.vars.example)
 .env*
 !.env.example
 
@@ -41,14 +51,25 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/temp
+# editor / IDE (create locally if you want workspace settings)
+.vscode/
+.idea/
 
+# local scratch, screenshots, and uploaded fixtures
+/temp
 /attachments
-/output/playwright/
+/output/
+
+# synthetic lab PDFs stay local; the fixture index is committed
+/sample-reports/*
+!/sample-reports/README.md
 
 # local Python artifacts for the optional fine-tune track
 __pycache__/
 *.py[cod]
-
-# local synthetic test fixtures (see sample-reports/README.md)
-/sample-reports/
+.venv/
+venv/
+ml/data/
+ml/datasets/
+ml/outputs/
+ml/predictions.jsonl

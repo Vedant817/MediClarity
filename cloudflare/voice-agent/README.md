@@ -41,7 +41,7 @@ npx wrangler secret put VOICE_CAPABILITY_SECRET
 npx wrangler secret put VOICE_SERVICE_SECRET
 ```
 
-For local development, copy `.dev.vars.example` to `.dev.vars`. Never commit `.dev.vars`.
+For local development, copy `.dev.vars.example` to `.dev.vars`. Never commit `.dev.vars`. After clone, run `npm run cf-typegen` to recreate `worker-configuration.d.ts` (generated Wrangler types are gitignored).
 
 The Next context endpoint contract is:
 
