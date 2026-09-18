@@ -8,7 +8,8 @@
     "deploy": "wrangler deploy --var NEXT_ORIGIN:https://my-mediclarity.vercel.app --var ALLOWED_ORIGIN:https://my-mediclarity.vercel.app --var TOKEN_AUDIENCE:mediclarity-voice-worker",
     "cf-typegen": "wrangler types",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "probe:nova": "wrangler dev --config wrangler.nova-probe.jsonc --port 8788"
   },
   "dependencies": {
     "@cloudflare/voice": "0.4.0",
