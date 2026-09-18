@@ -121,6 +121,8 @@ Set `NEXT_ORIGIN` and `ALLOWED_ORIGIN` in `cloudflare/voice-agent/wrangler.jsonc
 
 For local development, use the same secrets in `.env` and `cloudflare/voice-agent/.dev.vars`, keep both configured origins on `http://localhost:3000`, and run the Next.js and Worker development commands in separate terminals. Microphone capture requires localhost or HTTPS.
 
+Start the Worker with `npm run voice:dev` from the repository root (or `npm run dev` inside `cloudflare/voice-agent`). Do not add `--local`: speech recognition and response generation use the remote Workers AI binding while the Worker and Durable Object remain local.
+
 The Worker persists transcript messages in its Durable Object SQLite database. Raw microphone audio is not intentionally stored by this application. Before production use, define retention/deletion policy and confirm contractual, residency, and healthcare-data requirements for every configured vendor.
 
 Full Worker notes: `cloudflare/voice-agent/README.md`.

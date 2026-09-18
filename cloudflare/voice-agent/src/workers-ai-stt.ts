@@ -16,6 +16,16 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === "AbortError" || /aborted|AbortError/i.test(error.message));
 }
 
+function aiErrorMetadata(error: unknown) {
+  if (!error || typeof error !== "object") return { kind: typeof error };
+  const candidate = error as { name?: unknown; code?: unknown; status?: unknown };
+  return {
+    name: typeof candidate.name === "string" ? candidate.name : "UnknownError",
+    code: typeof candidate.code === "string" || typeof candidate.code === "number" ? candidate.code : undefined,
+    status: typeof candidate.status === "number" ? candidate.status : undefined,
+  };
+}
+
 function concatenate(chunks: ArrayBuffer[]): Uint8Array {
   const output = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.byteLength, 0));
   let offset = 0;
@@ -151,7 +161,7 @@ class WorkersAIWhisperSession implements TranscriberSession {
         if (!this.closed && transcript) this.options.onUtterance?.(transcript);
       } catch (error: unknown) {
         if (this.closed || isAbortError(error)) return;
-        console.error("voice.transcribe_failed");
+        console.error("voice.transcribe_failed", aiErrorMetadata(error));
       }
     });
   }
