@@ -26,7 +26,8 @@ const AppointmentSchema = new mongoose.Schema({
   followUpSent: { type: Boolean, default: false },
   followUpSentAt: { type: Date },
   createdAt: { type: Date, default: Date.now },
-});
+  updatedAt: { type: Date, default: Date.now },
+}, { timestamps: true });
 
 AppointmentSchema.pre("save", function setNotificationTimestamps(next) {
   if (this.isModified("reminderSent") && this.reminderSent && !this.reminderSentAt) {

@@ -22,16 +22,19 @@ export async function GET(req: Request) {
         if (!isCanonicalAppointmentDate(date)) {
             return NextResponse.json({ error: "Date must be a valid YYYY-MM-DD date" }, { status: 400 });
         }
-        const availability = await getAvailability(providerId, date);
+        const excludeAppointmentId = searchParams.get("excludeAppointmentId")?.trim() || undefined;
+        const availability = await getAvailability(providerId, date, { excludeAppointmentId });
         const availableTimes = availability[date].timeSlots
             .filter((slot) => slot.available)
             .map((slot) => slot.time);
-        const ownedScheduledTimes = await Appointment.find({
+        const ownedQuery: Record<string, unknown> = {
             patientId: userId,
             providerId,
             date,
             status: 'scheduled',
-        }).distinct('time');
+        };
+        if (excludeAppointmentId) ownedQuery._id = { $ne: excludeAppointmentId };
+        const ownedScheduledTimes = await Appointment.find(ownedQuery).distinct('time');
         return NextResponse.json({ availableTimes, ownedScheduledTimes, availability });
 
     } catch (error) {

@@ -44,6 +44,7 @@ export interface BookingData {
     time?: string;
     reason?: string;
     appointmentType?: string;
+    appointmentId?: string;
 }
 
 export interface Doctor {
@@ -73,4 +74,6 @@ export interface TimelineEvent {
     status?: string;
     type: 'medical' | 'medication' | 'appointment';
     providerId?: string;
+    createdAt?: string;
+    updatedAt?: string;
 }

@@ -9,7 +9,10 @@ import { Calendar, Clock, Stethoscope } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useUser } from '@clerk/nextjs';
-import { cancelAppointment, getAppointments, updateAppointmentStatus } from '@/actions/appointment';
+import { cancelAppointment, getAppointments, rescheduleAppointment, updateAppointmentStatus } from '@/actions/appointment';
+import { appointmentDateInTimeZone } from '@/lib/appointment-slot';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -31,6 +34,8 @@ interface Appointment {
     providerId: string;
     reason: string;
     status: string;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 function formatProviderId(providerId: string) {
@@ -73,6 +78,12 @@ export default function HealthTimeline() {
     const [loading, setLoading] = useState(true);
     const [appointments, setAppointments] = useState<TimelineEvent[]>([]);
     const { user } = useUser();
+    const [rescheduleEvent, setRescheduleEvent] = useState<TimelineEvent | null>(null);
+    const [rescheduleDate, setRescheduleDate] = useState('');
+    const [rescheduleTime, setRescheduleTime] = useState('');
+    const [rescheduleTimes, setRescheduleTimes] = useState<Array<{ value: string; label: string }>>([]);
+    const [rescheduleLoading, setRescheduleLoading] = useState(false);
+    const [rescheduleSaving, setRescheduleSaving] = useState(false);
 
     const fetchAppointments = async () => {
         setLoading(true);
@@ -84,7 +95,9 @@ export default function HealthTimeline() {
             title: `Appointment with ${formatProviderId(apt.providerId)}`,
             description: apt.reason,
             status: apt.status,
-            providerId: formatProviderId(apt.providerId),
+            providerId: apt.providerId,
+            createdAt: apt.createdAt,
+            updatedAt: apt.updatedAt,
             type: 'appointment' as const,
         }));
         setAppointments(
@@ -120,8 +133,65 @@ export default function HealthTimeline() {
     };
 
     const isPastVisit = (date: string) => {
-        const today = new Date().toISOString().split("T")[0];
-        return date < today;
+        return date < appointmentDateInTimeZone();
+    };
+
+    useEffect(() => {
+        if (!rescheduleEvent?.providerId || !rescheduleDate) {
+            setRescheduleTimes([]);
+            return;
+        }
+        const controller = new AbortController();
+        setRescheduleLoading(true);
+        setRescheduleTime('');
+        fetch(`/api/availability?providerId=${encodeURIComponent(rescheduleEvent.providerId)}&date=${encodeURIComponent(rescheduleDate)}&excludeAppointmentId=${encodeURIComponent(rescheduleEvent.id)}`, { signal: controller.signal, cache: 'no-store' })
+            .then(async (response) => {
+                if (!response.ok) throw new Error('Availability could not be loaded');
+                return response.json() as Promise<{ availability: Record<string, { timeSlots: Array<{ time: string; label: string; available: boolean }> }> }>;
+            })
+            .then((data) => {
+                setRescheduleTimes((data.availability[rescheduleDate]?.timeSlots ?? [])
+                    .filter((slot) => slot.available)
+                    .map((slot) => ({ value: slot.time, label: slot.label })));
+            })
+            .catch((error: Error) => {
+                if (error.name !== 'AbortError') {
+                    setRescheduleTimes([]);
+                    toast.error(error.message);
+                }
+            })
+            .finally(() => setRescheduleLoading(false));
+        return () => controller.abort();
+    }, [rescheduleDate, rescheduleEvent]);
+
+    const openReschedule = (event: TimelineEvent) => {
+        setRescheduleEvent(event);
+        setRescheduleDate(event.date);
+        setRescheduleTime(event.time ?? '');
+    };
+
+    const handleReschedule = async () => {
+        if (!rescheduleEvent || !rescheduleDate || !rescheduleTime) {
+            toast.error('Choose an open date and time');
+            return;
+        }
+        setRescheduleSaving(true);
+        const result = await rescheduleAppointment(rescheduleEvent.id, rescheduleDate, rescheduleTime);
+        setRescheduleSaving(false);
+        if (result.error) {
+            toast.error(result.error);
+            return;
+        }
+        toast.success(result.message ?? 'Appointment rescheduled');
+        setRescheduleEvent(null);
+        fetchAppointments();
+    };
+
+    const formatStamp = (value?: string) => {
+        if (!value) return null;
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.valueOf())) return null;
+        return parsed.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
     };
 
     const getStatusBadge = (status: string) => {
@@ -179,6 +249,14 @@ export default function HealthTimeline() {
                                         <Stethoscope className="h-4 w-4" />
                                         <span>{event.description}</span>
                                     </div>
+                                    {(event.createdAt || event.updatedAt) && (
+                                        <p className="mt-3 text-xs text-gray-500">
+                                            {event.createdAt ? `Booked ${formatStamp(event.createdAt)}` : null}
+                                            {event.updatedAt && event.createdAt && new Date(event.updatedAt).getTime() - new Date(event.createdAt).getTime() > 1000
+                                                ? ` · Last updated ${formatStamp(event.updatedAt)}`
+                                                : null}
+                                        </p>
+                                    )}
                                     <div className="flex justify-end mt-4 space-x-2">
                                         {event.status === 'scheduled' && isPastVisit(event.date) && (
                                             <p className="mr-auto self-center text-xs text-amber-800">
@@ -204,6 +282,16 @@ export default function HealthTimeline() {
                                                     Mark unattended
                                                 </Button>
                                             </>
+                                        )}
+                                        {event.status === 'scheduled' && !isPastVisit(event.date) && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="cursor-pointer"
+                                                onClick={() => openReschedule(event)}
+                                            >
+                                                Reschedule
+                                            </Button>
                                         )}
                                         {event.status === 'scheduled' && (
                                             <AlertDialog>
@@ -238,6 +326,51 @@ export default function HealthTimeline() {
                     </ScrollArea>
                 </div>
             )}
+            <Dialog open={Boolean(rescheduleEvent)} onOpenChange={(open) => { if (!open) setRescheduleEvent(null); }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Reschedule appointment</DialogTitle>
+                        <DialogDescription>
+                            {rescheduleEvent
+                                ? `Choose a free slot with ${formatProviderId(rescheduleEvent.providerId ?? '')}. Booked times stay blocked.`
+                                : 'Choose a free slot.'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="mb-1 block text-sm font-medium" htmlFor="reschedule-date">Date</label>
+                            <Input
+                                id="reschedule-date"
+                                type="date"
+                                min={appointmentDateInTimeZone()}
+                                value={rescheduleDate}
+                                onChange={(event) => setRescheduleDate(event.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-sm font-medium" htmlFor="reschedule-time">Available time</label>
+                            <select
+                                id="reschedule-time"
+                                className="w-full rounded border p-2"
+                                value={rescheduleTime}
+                                onChange={(event) => setRescheduleTime(event.target.value)}
+                                disabled={!rescheduleDate || rescheduleLoading}
+                            >
+                                <option value="">{rescheduleLoading ? 'Loading availability…' : rescheduleTimes.length ? 'Select a time' : 'No open slots'}</option>
+                                {rescheduleTimes.map((slot) => (
+                                    <option key={slot.value} value={slot.value}>{slot.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRescheduleEvent(null)}>Back</Button>
+                        <Button onClick={handleReschedule} disabled={rescheduleSaving || !rescheduleDate || !rescheduleTime}>
+                            {rescheduleSaving ? 'Saving…' : 'Save new time'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

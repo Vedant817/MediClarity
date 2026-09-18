@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { createAppointment } from '@/actions/appointment';
+import { createAppointment, rescheduleAppointment } from '@/actions/appointment';
 import { BookingData, Doctor } from '@/types';
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { extractSchedulerTaggedJson, stripSchedulerMetadata } from '@/lib/scheduler-context';
+import { extractSchedulerTaggedJson, extractSuggestedDoctors, stripSchedulerMetadata } from '@/lib/scheduler-context';
 
 /**
  * Strip streaming artifacts from assistant text before rendering/saving:
@@ -34,6 +34,7 @@ export default function ConversationalScheduler() {
     const [isLoading, setIsLoading] = useState(false);
     const [isBooking, setIsBooking] = useState(false);
     const [isBookingReady, setIsBookingReady] = useState(false);
+    const [isRescheduleReady, setIsRescheduleReady] = useState(false);
     const [bookingData, setBookingData] = useState<BookingData | null>(null);
     const [bookingIssue, setBookingIssue] = useState<{ messageId: string; content: string } | null>(null);
     const [suggestedDoctors, setSuggestedDoctors] = useState<Doctor[]>([]);
@@ -91,18 +92,80 @@ export default function ConversationalScheduler() {
             setSuggestedDoctors([]);
             setBookingData(null);
             setIsBookingReady(false);
+            setIsRescheduleReady(false);
             setBookingIssue(null);
             return () => controller.abort();
         }
 
-        const doctors = extractSchedulerTaggedJson<Doctor[]>(latestAssistant.content, 'SUGGESTED_DOCTORS');
-        setSuggestedDoctors(Array.isArray(doctors) ? doctors.filter((doctor) => providerCatalog.some((provider) =>
-            provider.id === doctor.id && provider.name === doctor.name && provider.specialty === doctor.specialty)) : []);
+        const doctors = extractSuggestedDoctors(latestAssistant.content)
+            .filter((doctor) => providerCatalog.some((provider) =>
+                provider.id === doctor.id && provider.name === doctor.name && provider.specialty === doctor.specialty))
+            .map((doctor) => ({ ...doctor, justification: doctor.justification ?? "" }));
+        setSuggestedDoctors(doctors);
+
+        const reschedule = extractSchedulerTaggedJson<BookingData>(latestAssistant.content, 'RESCHEDULE_READY');
+        if (reschedule?.appointmentId && reschedule.providerId && reschedule.date && reschedule.time) {
+            const provider = providerCatalog.find((entry) =>
+                entry.id === reschedule.providerId && entry.name === reschedule.providerName) ?? providerCatalog.find((entry) => entry.id === reschedule.providerId);
+            if (!provider) {
+                setBookingData(null);
+                setIsBookingReady(false);
+                setIsRescheduleReady(false);
+                setBookingIssue({
+                    messageId: latestAssistant.id,
+                    content: 'I could not validate that reschedule. No appointment was moved. Please ask for another listed time.',
+                });
+                return () => controller.abort();
+            }
+            fetch(`/api/availability?providerId=${encodeURIComponent(provider.id)}&date=${encodeURIComponent(reschedule.date)}&excludeAppointmentId=${encodeURIComponent(reschedule.appointmentId)}`, {
+                signal: controller.signal,
+                cache: 'no-store',
+            })
+                .then((response) => response.ok ? response.json() : Promise.reject(new Error('Availability validation failed')))
+                .then((data: { availableTimes?: string[]; ownedScheduledTimes?: string[] }) => {
+                    if (data.ownedScheduledTimes?.includes(reschedule.time!)) {
+                        setBookingData(null);
+                        setIsBookingReady(false);
+                        setIsRescheduleReady(false);
+                        setBookingIssue({
+                            messageId: latestAssistant.id,
+                            content: `You already have a visit with ${provider.name} on ${reschedule.date} at ${reschedule.time}. That slot cannot be used for a reschedule.`,
+                        });
+                        return;
+                    }
+                    if (!data.availableTimes?.includes(reschedule.time!)) {
+                        setBookingData(null);
+                        setIsBookingReady(false);
+                        setIsRescheduleReady(false);
+                        setBookingIssue({
+                            messageId: latestAssistant.id,
+                            content: `The proposed ${reschedule.time} slot on ${reschedule.date} is not available. No appointment was moved. Please ask for another listed time.`,
+                        });
+                        return;
+                    }
+                    setBookingData({ ...reschedule, providerName: provider.name, providerId: provider.id });
+                    setIsRescheduleReady(true);
+                    setIsBookingReady(false);
+                    setBookingIssue(null);
+                })
+                .catch((error) => {
+                    if (error instanceof Error && error.name === 'AbortError') return;
+                    setBookingData(null);
+                    setIsBookingReady(false);
+                    setIsRescheduleReady(false);
+                    setBookingIssue({
+                        messageId: latestAssistant.id,
+                        content: 'I could not verify that slot against live availability. No appointment was moved. Please try again.',
+                    });
+                });
+            return () => controller.abort();
+        }
 
         const booking = extractSchedulerTaggedJson<BookingData>(latestAssistant.content, 'BOOKING_READY');
         if (!booking) {
             setBookingData(null);
             setIsBookingReady(false);
+            setIsRescheduleReady(false);
             setBookingIssue(null);
             return () => controller.abort();
         }
@@ -115,6 +178,7 @@ export default function ConversationalScheduler() {
         if (!complete || !provider || !booking.date || !booking.time) {
             setBookingData(null);
             setIsBookingReady(false);
+            setIsRescheduleReady(false);
             setBookingIssue({
                 messageId: latestAssistant.id,
                 content: 'I could not validate all booking details. No appointment was booked. Please ask the scheduler for another provider and time.',
@@ -131,6 +195,7 @@ export default function ConversationalScheduler() {
                 if (data.ownedScheduledTimes?.includes(booking.time!)) {
                     setBookingData(null);
                     setIsBookingReady(false);
+                    setIsRescheduleReady(false);
                     setBookingIssue({
                         messageId: latestAssistant.id,
                         content: `This appointment is scheduled with ${provider.name} on ${booking.date} at ${booking.time}.`,
@@ -140,6 +205,7 @@ export default function ConversationalScheduler() {
                 if (!data.availableTimes?.includes(booking.time!)) {
                     setBookingData(null);
                     setIsBookingReady(false);
+                    setIsRescheduleReady(false);
                     setBookingIssue({
                         messageId: latestAssistant.id,
                         content: `The proposed ${booking.time} slot on ${booking.date} is not available. No appointment was booked. Please ask for another listed time.`,
@@ -148,12 +214,14 @@ export default function ConversationalScheduler() {
                 }
                 setBookingData({ ...booking, providerName: provider.name });
                 setIsBookingReady(true);
+                setIsRescheduleReady(false);
                 setBookingIssue(null);
             })
             .catch((error) => {
                 if (error instanceof Error && error.name === 'AbortError') return;
                 setBookingData(null);
                 setIsBookingReady(false);
+                setIsRescheduleReady(false);
                 setBookingIssue({
                     messageId: latestAssistant.id,
                     content: 'I could not verify that slot against live availability. No appointment was booked. Please try again.',
@@ -173,6 +241,7 @@ export default function ConversationalScheduler() {
         }
         setMessages([]);
         setIsBookingReady(false);
+        setIsRescheduleReady(false);
         setBookingData(null);
         setBookingIssue(null);
         setSuggestedDoctors([]);
@@ -346,6 +415,35 @@ export default function ConversationalScheduler() {
         } else toast.error('The suggested booking is incomplete. Ask the scheduler for provider, type, date, time, and reason.');
     };
 
+    const handleFinalReschedule = async () => {
+        if (!bookingData?.appointmentId || !bookingData.date || !bookingData.time) {
+            toast.error('The suggested reschedule is incomplete. Ask the scheduler for another listed time.');
+            return;
+        }
+        setIsBooking(true);
+        try {
+            const result = await rescheduleAppointment(bookingData.appointmentId, bookingData.date, bookingData.time);
+            if (result.success) {
+                toast.success(result.message ?? 'Appointment rescheduled');
+                setBookingData(null);
+                setIsBookingReady(false);
+                setIsRescheduleReady(false);
+                const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+                if (latestAssistant) {
+                    setBookingIssue({
+                        messageId: latestAssistant.id,
+                        content: `This appointment is rescheduled with ${bookingData.providerName ?? 'the selected provider'} on ${bookingData.date} at ${bookingData.time}.`,
+                    });
+                }
+                router.refresh();
+            } else {
+                toast.error(result.error ?? 'That slot could not be reserved');
+            }
+        } finally {
+            setIsBooking(false);
+        }
+    };
+
     return (
         <div className="w-full max-w-7xl mx-auto flex flex-col h-[calc(100vh-160px)] bg-white rounded-lg shadow-md">
             <div className="p-4 border-b">
@@ -378,7 +476,7 @@ export default function ConversationalScheduler() {
             </div>
 
             <div className="p-4 border-t bg-white">
-                {suggestedDoctors.length > 0 && !isBookingReady && (
+                {suggestedDoctors.length > 0 && !isBookingReady && !isRescheduleReady && (
                     <Card className="mb-4">
                         <CardHeader>
                             <CardTitle>Suggested Doctors</CardTitle>
@@ -394,6 +492,22 @@ export default function ConversationalScheduler() {
                                     </Button>
                                 </div>
                             ))}
+                        </CardContent>
+                    </Card>
+                )}
+
+                {isRescheduleReady && bookingData && (
+                    <Card className="mb-4 bg-amber-50 border-amber-200">
+                        <CardHeader>
+                            <CardTitle className="text-amber-900">Confirm Reschedule</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <p><strong>Provider:</strong> {bookingData.providerName}</p>
+                            <p><strong>New date:</strong> {bookingData.date}</p>
+                            <p><strong>New time:</strong> {bookingData.time}</p>
+                            <Button onClick={handleFinalReschedule} disabled={isBooking} className="mt-4 w-full bg-amber-700 hover:bg-amber-800">
+                                {isBooking ? 'Rescheduling...' : 'Reschedule Appointment'}
+                            </Button>
                         </CardContent>
                     </Card>
                 )}
@@ -433,11 +547,11 @@ export default function ConversationalScheduler() {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         placeholder="Describe your symptoms or appointment needs..."
-                        disabled={isLoading || isBookingReady}
+                        disabled={isLoading || isBookingReady || isRescheduleReady}
                     />
                     <Button
                         type="submit"
-                        disabled={isLoading || !input.trim() || isBookingReady}
+                        disabled={isLoading || !input.trim() || isBookingReady || isRescheduleReady}
                         className="bg-teal-500 hover:bg-teal-600 text-white"
                     >
                         Send

@@ -54,7 +54,7 @@ export async function createAppointment(prevState: any, formData: FormData) {
 
         await newAppointment.save();
 
-        revalidatePath('/appointments');
+        revalidatePath('/dashboard/appointments');
         return { success: true };
     } catch (error) {
         console.error('Appointment creation error:', error);
@@ -108,7 +108,7 @@ export async function updateAppointmentStatus(appointmentId: string, status: str
             };
         }
 
-        revalidatePath('/appointments');
+        revalidatePath('/dashboard/appointments');
         const labels: Record<string, string> = {
             attended: 'marked as attended',
             cancelled: 'cancelled',
@@ -118,6 +118,62 @@ export async function updateAppointmentStatus(appointmentId: string, status: str
     } catch (error) {
         console.error('Appointment status update error:', error);
         return { error: 'Failed to update appointment' };
+    }
+}
+
+export async function rescheduleAppointment(appointmentId: string, date: string, time: string) {
+    try {
+        const { userId } = await auth();
+        if (!userId) return { error: 'User not authenticated' };
+
+        const parsed = z.object({
+            appointmentId: z.string().min(1),
+            date: z.string().refine(isCanonicalAppointmentDate, 'Date must be a valid YYYY-MM-DD date'),
+            time: z.string().transform(normalizeAppointmentTime).refine(isCanonicalAppointmentTime, 'Time must be one of the available appointment slots'),
+        }).safeParse({ appointmentId, date, time });
+        if (!parsed.success) {
+            return { error: parsed.error.issues.map((issue) => issue.message).join(', ') };
+        }
+
+        await connectDB();
+        const appointment = await Appointment.findOne({
+            _id: parsed.data.appointmentId,
+            patientId: userId,
+            status: 'scheduled',
+        });
+        if (!appointment) {
+            const exists = await Appointment.exists({ _id: parsed.data.appointmentId, patientId: userId });
+            return {
+                error: exists
+                    ? 'Only scheduled visits can be rescheduled.'
+                    : 'Appointment not found',
+            };
+        }
+
+        if (appointment.date === parsed.data.date && appointment.time === parsed.data.time) {
+            return { success: true, message: 'Appointment is already at that time' };
+        }
+
+        const availability = await getAvailability(appointment.providerId, parsed.data.date, {
+            excludeAppointmentId: String(appointment._id),
+        });
+        const selectedSlot = availability[parsed.data.date]?.timeSlots.find((slot) => slot.time === parsed.data.time);
+        if (!selectedSlot?.available) {
+            return { error: 'That time is not available. Choose another open slot.' };
+        }
+
+        appointment.date = parsed.data.date;
+        appointment.time = parsed.data.time;
+        await appointment.save();
+
+        revalidatePath('/dashboard/appointments');
+        return { success: true, message: `Appointment rescheduled to ${parsed.data.date} at ${parsed.data.time}` };
+    } catch (error) {
+        console.error('Appointment reschedule error:', error);
+        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 11000) {
+            return { error: 'That time slot is already booked. Please select another.' };
+        }
+        return { error: 'Failed to reschedule appointment' };
     }
 }
 
